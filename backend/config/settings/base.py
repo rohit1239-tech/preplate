@@ -49,9 +49,16 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
-    # Add apps here
-    # "apps.accounts",
-    # "apps.restaurants",
+    "apps.accounts",
+    "apps.restaurants",
+    "apps.delivery_locations",
+    "apps.slots",
+    "apps.menus",
+    "apps.cart",
+    "apps.orders",
+    "apps.payments",
+    "apps.notifications",
+    "apps.analytics",
 ]
 
 INSTALLED_APPS = (
@@ -170,6 +177,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 # ------------------------------------------------------------------------------
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+AUTH_USER_MODEL = "accounts.User"
 
 # ------------------------------------------------------------------------------
 # DRF
@@ -179,6 +187,12 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
+    ),
+    "DEFAULT_PAGINATION_CLASS": "core.pagination.classes.StandardResultsSetPagination",
+    "PAGE_SIZE": 20,
+    "EXCEPTION_HANDLER": "core.exceptions.handlers.api_exception_handler",
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 

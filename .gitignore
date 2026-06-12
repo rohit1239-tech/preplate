@@ -9,6 +9,7 @@ staticfiles/
 
 # Virtualenv
 backend/venv/
+backend/.venv/
 
 # Env
 .env
