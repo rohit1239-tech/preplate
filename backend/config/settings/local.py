@@ -5,6 +5,7 @@ DEBUG = True
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
+    "preplate.onrender.com",
 ]
 
 CORS_ALLOW_ALL_ORIGINS = True
