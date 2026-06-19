@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.shortcuts import redirect
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
@@ -22,6 +23,7 @@ router.register("orders", OrderViewSet, basename="order")
 router.register("notifications", NotificationViewSet, basename="notification")
 
 urlpatterns = [
+    path("", lambda request: redirect("/api/docs/")),
     path("admin/", admin.site.urls),
     path("api/v1/auth/", include("apps.accounts.urls")),
     path("api/v1/analytics/", include("apps.analytics.urls")),
