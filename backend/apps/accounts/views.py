@@ -14,8 +14,10 @@ class SendOTPView(APIView):
         serializer = SendOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         otp = OTPAuthService.send_otp(
-            serializer.validated_data["phone"],
+            serializer.validated_data["email"],
+            serializer.validated_data["role"],
             request.META.get("REMOTE_ADDR"),
+            serializer.validated_data["intent"],
         )
         payload = {"detail": "OTP sent."}
         if settings.DEBUG:

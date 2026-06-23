@@ -10,7 +10,7 @@ import { useAuthStore } from "@/store";
 
 export default function Home() {
   const { user, clearSession } = useAuthStore();
-  const roleHref = user?.role === "RESTAURANT_ADMIN" ? "/restaurant/orders" : user?.role === "PLATFORM_ADMIN" ? "/admin" : "/orders";
+  const roleHref = user?.role === "RESTAURANT_ADMIN" ? "/restaurant" : user?.role === "PLATFORM_ADMIN" ? "/admin" : "/locations";
 
   return (
     <main className="min-h-screen bg-background text-text-primary">
@@ -23,7 +23,7 @@ export default function Home() {
             {user ? (
               <div className="flex items-center gap-2">
                 <Link href={roleHref} className="rounded-md bg-white/12 px-4 py-2 text-sm font-medium backdrop-blur hover:bg-white/20">
-                  {user.role === "CUSTOMER" ? "My orders" : user.role === "RESTAURANT_ADMIN" ? "Restaurant" : "Admin"}
+                  {user.role === "CUSTOMER" ? "Order now" : user.role === "RESTAURANT_ADMIN" ? "Restaurant" : "Admin"}
                 </Link>
                 <button onClick={clearSession} className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-black hover:bg-white/90">Logout</button>
               </div>
@@ -46,11 +46,6 @@ export default function Home() {
               <Button asChild variant="secondary" className="h-13 bg-white/14 px-6 text-base text-white hover:bg-white/20">
                 <Link href="/restaurants">Browse restaurants</Link>
               </Button>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2 text-sm text-white/75">
-              <a className="rounded-md bg-white/10 px-3 py-2 hover:bg-white/20" href="/login?role=CUSTOMER">Customer demo</a>
-              <a className="rounded-md bg-white/10 px-3 py-2 hover:bg-white/20" href="/login?role=RESTAURANT_ADMIN">Restaurant admin demo</a>
-              <a className="rounded-md bg-white/10 px-3 py-2 hover:bg-white/20" href="/login?role=PLATFORM_ADMIN">Platform admin demo</a>
             </div>
           </div>
         </div>

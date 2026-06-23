@@ -1,7 +1,11 @@
+import logging
+
 from rest_framework import decorators, permissions, response, viewsets
 
 from apps.restaurants.models import Restaurant
 from apps.restaurants.serializers import RestaurantSerializer
+
+logger = logging.getLogger(__name__)
 
 
 class RestaurantViewSet(viewsets.ModelViewSet):
@@ -17,7 +21,12 @@ class RestaurantViewSet(viewsets.ModelViewSet):
         return qs.filter(status=Restaurant.Status.APPROVED, is_active=True)
 
     def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
+        restaurant = serializer.save(owner=self.request.user)
+        logger.info("restaurant_created", extra={"restaurant_id": str(restaurant.id), "owner_id": str(self.request.user.id), "status": restaurant.status})
+
+    def perform_update(self, serializer):
+        restaurant = serializer.save()
+        logger.info("restaurant_updated", extra={"restaurant_id": str(restaurant.id), "actor_id": str(self.request.user.id), "status": restaurant.status, "is_active": restaurant.is_active})
 
     @decorators.action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def approve(self, request, pk=None):
@@ -26,6 +35,7 @@ class RestaurantViewSet(viewsets.ModelViewSet):
             self.permission_denied(request)
         restaurant.status = Restaurant.Status.APPROVED
         restaurant.save(update_fields=["status", "updated_at"])
+        logger.info("restaurant_approved", extra={"restaurant_id": str(restaurant.id), "actor_id": str(request.user.id)})
         return response.Response(self.get_serializer(restaurant).data)
 
     @decorators.action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
@@ -35,4 +45,5 @@ class RestaurantViewSet(viewsets.ModelViewSet):
             self.permission_denied(request)
         restaurant.status = Restaurant.Status.REJECTED
         restaurant.save(update_fields=["status", "updated_at"])
+        logger.info("restaurant_rejected", extra={"restaurant_id": str(restaurant.id), "actor_id": str(request.user.id)})
         return response.Response(self.get_serializer(restaurant).data)

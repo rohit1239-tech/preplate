@@ -17,9 +17,9 @@ class Command(BaseCommand):
     help = "Seed deterministic demo data for local MVP testing."
 
     def handle(self, *args, **options):
-        platform_admin = self._user("9999990000", User.Role.PLATFORM_ADMIN)
-        restaurant_owner = self._user("9999990001", User.Role.RESTAURANT_ADMIN)
-        customer = self._user("9999990002", User.Role.CUSTOMER)
+        platform_admin = self._user("platform@preplate.local", User.Role.PLATFORM_ADMIN, None)
+        restaurant_owner = self._user("restaurant@preplate.local", User.Role.RESTAURANT_ADMIN, "9999990001")
+        customer = self._user("customer@preplate.local", User.Role.CUSTOMER, "9999990002")
 
         bowl_house = self._restaurant(
             owner=restaurant_owner,
@@ -83,16 +83,20 @@ class Command(BaseCommand):
         )
 
         self.stdout.write(self.style.SUCCESS("Seeded Preplate demo data."))
-        self.stdout.write("Demo users: platform=9999990000, restaurant=9999990001, customer=9999990002")
+        self.stdout.write("Demo users: platform=platform@preplate.local, restaurant=restaurant@preplate.local, customer=customer@preplate.local")
         self.stdout.write("Local debug OTP is 123456 when DEBUG=True.")
         self.stdout.write(f"Created restaurants: {bowl_house.name}, {south_street.name}")
         self.stdout.write(f"Sample pickup locations: {hostel_a.name}, {college_gate.name}, {office_park.name}")
 
-    def _user(self, phone, role):
-        user, _ = User.objects.get_or_create(phone=phone, defaults={"role": role})
-        if user.role != role:
-            user.role = role
-            user.save(update_fields=["role"])
+    def _user(self, email, role, phone):
+        user, _ = User.objects.get_or_create(email=email, defaults={"role": role, "phone": phone})
+        changed = False
+        for field, value in {"role": role, "phone": phone}.items():
+            if getattr(user, field) != value:
+                setattr(user, field, value)
+                changed = True
+        if changed:
+            user.save(update_fields=["role", "phone"])
         return user
 
     def _restaurant(self, owner, name, phone, description, status):

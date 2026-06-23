@@ -5,7 +5,7 @@ export type PaymentMethod = "UPI" | "COD";
 export type PaymentStatus = "PENDING" | "SUCCESS" | "FAILED";
 
 export interface PaginatedResponse<T> { count: number; next: string | null; previous: string | null; results: T[]; }
-export interface User { id: string; phone: string; first_name: string; last_name: string; role: UserRole; }
+export interface User { id: string; email: string; phone: string | null; first_name: string; last_name: string; role: UserRole; }
 export interface Restaurant { id: string; owner: string; name: string; description: string; phone: string; status: string; is_active: boolean; }
 export interface DeliveryLocation { id: string; restaurant: string; name: string; address: string; capacity_per_slot: number; is_active: boolean; }
 export interface DeliverySlot { id: string; restaurant: string; name: string; cutoff_time: string; delivery_start_time: string; delivery_end_time: string; is_active: boolean; }

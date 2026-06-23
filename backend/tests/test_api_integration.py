@@ -4,6 +4,8 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework import status
+
+from apps.accounts.models import User
 from rest_framework.test import APIClient
 
 
@@ -13,27 +15,37 @@ class FullOrderFlowAPITests(TestCase):
         cache.clear()
         self.client = APIClient()
 
-    def _auth(self, phone: str, role: str = "CUSTOMER") -> str:
-        send = self.client.post("/api/v1/auth/otp/send/", {"phone": phone}, format="json")
+    def _auth(self, email: str, role: str = "CUSTOMER") -> str:
+        if role == "PLATFORM_ADMIN":
+            User.objects.get_or_create(email=email, defaults={"role": User.Role.PLATFORM_ADMIN})
+        send = self.client.post("/api/v1/auth/otp/send/", {"email": email, "role": role, "intent": "LOGIN" if role == "PLATFORM_ADMIN" else "SIGNUP"}, format="json")
         self.assertEqual(send.status_code, status.HTTP_200_OK)
         otp = send.json().get("debug_otp", "123456")
-        verify = self.client.post(
-            "/api/v1/auth/otp/verify/",
-            {"phone": phone, "otp": otp, "role": role},
-            format="json",
-        )
+        payload = {"email": email, "otp": otp, "role": role}
+        if role == "CUSTOMER":
+            payload.update({"first_name": "Test", "last_name": "Customer", "mobile": "9999000001"})
+        if role == "RESTAURANT_ADMIN":
+            payload.update({
+                "first_name": "Test",
+                "last_name": "Owner",
+                "mobile": "9999000002",
+                "restaurant_name": "Pending Signup Kitchen",
+                "restaurant_phone": "9999000011",
+                "restaurant_description": "Signup restaurant",
+            })
+        verify = self.client.post("/api/v1/auth/otp/verify/", payload, format="json")
         self.assertEqual(verify.status_code, status.HTTP_200_OK, verify.json())
         return verify.json()["access"]
 
     def test_end_to_end_order_flow(self):
-        customer_token = self._auth("9999000001", "CUSTOMER")
-        owner_token = self._auth("9999000002", "RESTAURANT_ADMIN")
-        admin_token = self._auth("9999000003", "PLATFORM_ADMIN")
+        customer_token = self._auth("customer-test@preplate.local", "CUSTOMER")
+        owner_token = self._auth("owner-test@preplate.local", "RESTAURANT_ADMIN")
+        admin_token = self._auth("admin-test@preplate.local", "PLATFORM_ADMIN")
 
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {customer_token}")
         me = self.client.get("/api/v1/auth/me/")
         self.assertEqual(me.status_code, status.HTTP_200_OK)
-        self.assertEqual(me.json()["phone"], "9999000001")
+        self.assertEqual(me.json()["email"], "customer-test@preplate.local")
 
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {owner_token}")
         restaurant = self.client.post(
@@ -157,19 +169,98 @@ class FullOrderFlowAPITests(TestCase):
         self.client.credentials()
         self.assertEqual(self.client.get("/api/v1/orders/").status_code, status.HTTP_401_UNAUTHORIZED)
 
-        customer_token = self._auth("9999000101", "CUSTOMER")
+        customer_token = self._auth("guard-customer@preplate.local", "CUSTOMER")
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {customer_token}")
         self.assertEqual(
             self.client.get("/api/v1/analytics/platform/").status_code,
             status.HTTP_403_FORBIDDEN,
         )
 
+        blocked_admin_otp = self.client.post(
+            "/api/v1/auth/otp/send/",
+            {"email": "not-an-admin@preplate.local", "role": "PLATFORM_ADMIN", "intent": "LOGIN"},
+            format="json",
+        )
+        self.assertEqual(blocked_admin_otp.status_code, status.HTTP_403_FORBIDDEN)
+
         invalid = self.client.post(
             "/api/v1/auth/otp/verify/",
-            {"phone": "9999000101", "otp": "000000"},
+            {"email": "guard-customer@preplate.local", "otp": "000000"},
             format="json",
         )
         self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_login_intent_requires_existing_customer_before_sending_otp(self):
+        missing = self.client.post(
+            "/api/v1/auth/otp/send/",
+            {"email": "missing-customer@preplate.local", "role": "CUSTOMER", "intent": "LOGIN"},
+            format="json",
+        )
+        self.assertEqual(missing.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("email", missing.json()["message"])
+
+        User.objects.create_user(
+            email="existing-customer@preplate.local",
+            role=User.Role.CUSTOMER,
+            phone="9999000088",
+        )
+        existing = self.client.post(
+            "/api/v1/auth/otp/send/",
+            {"email": "existing-customer@preplate.local", "role": "CUSTOMER", "intent": "LOGIN"},
+            format="json",
+        )
+        self.assertEqual(existing.status_code, status.HTTP_200_OK)
+
+    def test_signup_intent_rejects_existing_email_before_sending_otp(self):
+        User.objects.create_user(
+            email="already-customer@preplate.local",
+            role=User.Role.CUSTOMER,
+            phone="9999000087",
+        )
+        existing = self.client.post(
+            "/api/v1/auth/otp/send/",
+            {"email": "already-customer@preplate.local", "role": "CUSTOMER", "intent": "SIGNUP"},
+            format="json",
+        )
+        self.assertEqual(existing.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("email", existing.json()["message"])
+
+    def test_restaurant_admin_signup_validation_does_not_consume_otp(self):
+        existing = User.objects.create_user(
+            email="existing-mobile@preplate.local",
+            role=User.Role.CUSTOMER,
+            phone="9999000099",
+        )
+        self.assertIsNotNone(existing.id)
+
+        email = "restaurant-duplicate-mobile@preplate.local"
+        send = self.client.post(
+            "/api/v1/auth/otp/send/",
+            {"email": email, "role": "RESTAURANT_ADMIN", "intent": "SIGNUP"},
+            format="json",
+        )
+        self.assertEqual(send.status_code, status.HTTP_200_OK)
+        otp = send.json().get("debug_otp", "123456")
+
+        payload = {
+            "email": email,
+            "otp": otp,
+            "role": "RESTAURANT_ADMIN",
+            "first_name": "Test",
+            "last_name": "Owner",
+            "mobile": "9999000099",
+            "restaurant_name": "Duplicate Mobile Kitchen",
+            "restaurant_phone": "9999000098",
+            "restaurant_description": "Signup restaurant",
+        }
+        duplicate = self.client.post("/api/v1/auth/otp/verify/", payload, format="json")
+        self.assertEqual(duplicate.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("mobile", duplicate.json()["message"])
+
+        payload["mobile"] = "9999000097"
+        verify = self.client.post("/api/v1/auth/otp/verify/", payload, format="json")
+        self.assertEqual(verify.status_code, status.HTTP_200_OK, verify.json())
+        self.assertEqual(verify.json()["user"]["role"], "RESTAURANT_ADMIN")
 
     def test_openapi_schema(self):
         self.client.credentials()

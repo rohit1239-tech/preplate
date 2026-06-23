@@ -1,3 +1,4 @@
+import logging
 import random
 from decimal import Decimal
 
@@ -10,6 +11,8 @@ from apps.cart.models import Cart, CartItem
 from apps.menus.models import MenuItem
 from apps.orders.models import Order, OrderItem, OrderStatusHistory
 from apps.payments.models import Payment
+
+logger = logging.getLogger(__name__)
 
 
 class CartValidationService:
@@ -58,9 +61,13 @@ class CartService:
     @classmethod
     @transaction.atomic
     def initialize_cart(cls, customer, restaurant, delivery_location, slot, delivery_date) -> Cart:
+        logger.info("cart_initialize_requested", extra={"user_id": str(customer.id), "restaurant_id": str(restaurant.id), "delivery_location_id": str(delivery_location.id), "slot_id": str(slot.id), "delivery_date": delivery_date})
         if delivery_location.restaurant_id != restaurant.id or slot.restaurant_id != restaurant.id:
+            logger.warning("cart_initialize_rejected_mismatched_scope", extra={"user_id": str(customer.id), "restaurant_id": str(restaurant.id), "delivery_location_id": str(delivery_location.id), "slot_id": str(slot.id)})
             raise ValidationError("Location and slot must belong to the selected restaurant.")
-        Cart.objects.filter(customer=customer, status=Cart.Status.ACTIVE).update(status=Cart.Status.ABANDONED)
+        abandoned_count = Cart.objects.filter(customer=customer, status=Cart.Status.ACTIVE).update(status=Cart.Status.ABANDONED)
+        if abandoned_count:
+            logger.info("active_carts_abandoned", extra={"user_id": str(customer.id), "count": abandoned_count})
         cart = Cart.objects.create(
             customer=customer,
             restaurant=restaurant,
@@ -69,16 +76,21 @@ class CartService:
             delivery_date=delivery_date,
         )
         CartValidationService.validate_cutoff(cart)
+        logger.info("cart_initialized", extra={"cart_id": str(cart.id), "user_id": str(customer.id), "restaurant_id": str(restaurant.id)})
         return cart
 
     @classmethod
     @transaction.atomic
     def add_item(cls, cart: Cart, menu_item: MenuItem, quantity: int) -> CartItem:
+        logger.info("cart_add_item_requested", extra={"cart_id": str(cart.id), "menu_item_id": str(menu_item.id), "quantity": quantity})
         if cart.status != Cart.Status.ACTIVE:
+            logger.warning("cart_add_item_rejected_inactive_cart", extra={"cart_id": str(cart.id), "status": cart.status})
             raise ValidationError("Cart is not active.")
         if menu_item.restaurant_id != cart.restaurant_id:
+            logger.warning("cart_add_item_rejected_wrong_restaurant", extra={"cart_id": str(cart.id), "menu_item_id": str(menu_item.id), "cart_restaurant_id": str(cart.restaurant_id), "item_restaurant_id": str(menu_item.restaurant_id)})
             raise ValidationError("Menu item must belong to cart restaurant.")
         if not menu_item.is_available or not menu_item.is_active:
+            logger.warning("cart_add_item_rejected_unavailable_item", extra={"cart_id": str(cart.id), "menu_item_id": str(menu_item.id), "is_available": menu_item.is_available, "is_active": menu_item.is_active})
             raise ValidationError("Menu item is not available.")
         item, created = CartItem.objects.get_or_create(
             cart=cart,
@@ -88,11 +100,13 @@ class CartService:
         if not created:
             item.quantity += quantity
             item.save(update_fields=["quantity", "updated_at"])
+        logger.info("cart_item_saved", extra={"cart_id": str(cart.id), "cart_item_id": str(item.id), "menu_item_id": str(menu_item.id), "quantity": item.quantity, "item_created": created})
         return item
 
     @classmethod
     @transaction.atomic
     def checkout(cls, cart: Cart, payment_method: str, actor) -> Order:
+        logger.info("cart_checkout_requested", extra={"cart_id": str(cart.id), "actor_id": str(actor.id), "payment_method": payment_method})
         cart = Cart.objects.select_for_update().get(pk=cart.pk)
         CartValidationService.validate_cart(cart)
         CartValidationService.validate_capacity(cart)
@@ -127,6 +141,7 @@ class CartService:
         OrderStatusHistory.objects.create(order=order, from_status="", to_status=Order.Status.PLACED, changed_by=actor)
         cart.status = Cart.Status.CHECKED_OUT
         cart.save(update_fields=["status", "updated_at"])
+        logger.info("cart_checkout_succeeded", extra={"cart_id": str(cart.id), "order_id": str(order.id), "order_number": order.order_number, "total": str(total), "item_count": len(cart_items)})
         return order
 
     @staticmethod

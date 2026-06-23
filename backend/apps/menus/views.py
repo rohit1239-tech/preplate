@@ -1,9 +1,13 @@
+import logging
+
 from rest_framework import viewsets
 
 from core.permissions.classes import ReadOnlyOrRestaurantOwnerOrPlatformAdmin
 
 from apps.menus.models import MenuCategory, MenuItem
 from apps.menus.serializers import MenuCategorySerializer, MenuItemSerializer
+
+logger = logging.getLogger(__name__)
 
 
 class MenuCategoryViewSet(viewsets.ModelViewSet):
@@ -21,6 +25,29 @@ class MenuCategoryViewSet(viewsets.ModelViewSet):
             qs = qs.filter(restaurant__owner=self.request.user)
         return qs
 
+    def perform_create(self, serializer):
+        category = serializer.save()
+        logger.info(
+            "menu_category_created",
+            extra={
+                "category_id": str(category.id),
+                "restaurant_id": str(category.restaurant_id),
+                "actor_id": str(self.request.user.id),
+            },
+        )
+
+    def perform_update(self, serializer):
+        category = serializer.save()
+        logger.info(
+            "menu_category_updated",
+            extra={
+                "category_id": str(category.id),
+                "restaurant_id": str(category.restaurant_id),
+                "actor_id": str(self.request.user.id),
+                "is_active": category.is_active,
+            },
+        )
+
 
 class MenuItemViewSet(viewsets.ModelViewSet):
     serializer_class = MenuItemSerializer
@@ -36,3 +63,29 @@ class MenuItemViewSet(viewsets.ModelViewSet):
         elif self.request.user.role == "RESTAURANT_ADMIN":
             qs = qs.filter(restaurant__owner=self.request.user)
         return qs
+
+    def perform_create(self, serializer):
+        item = serializer.save()
+        logger.info(
+            "menu_item_created",
+            extra={
+                "menu_item_id": str(item.id),
+                "restaurant_id": str(item.restaurant_id),
+                "actor_id": str(self.request.user.id),
+                "has_image": bool(item.image),
+            },
+        )
+
+    def perform_update(self, serializer):
+        item = serializer.save()
+        logger.info(
+            "menu_item_updated",
+            extra={
+                "menu_item_id": str(item.id),
+                "restaurant_id": str(item.restaurant_id),
+                "actor_id": str(self.request.user.id),
+                "is_active": item.is_active,
+                "is_available": item.is_available,
+                "has_image": bool(item.image),
+            },
+        )

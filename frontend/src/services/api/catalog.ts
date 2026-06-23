@@ -51,12 +51,12 @@ export async function listMenuItems(params?: Record<string, unknown>) {
   return data;
 }
 
-export async function createMenuItem(payload: Partial<MenuItem>) {
+export async function createMenuItem(payload: Partial<MenuItem> | FormData) {
   const { data } = await apiClient.post<MenuItem>("/menu-items/", payload);
   return data;
 }
 
-export async function updateMenuItem(id: string, payload: Partial<MenuItem>) {
+export async function updateMenuItem(id: string, payload: Partial<MenuItem> | FormData) {
   const { data } = await apiClient.patch<MenuItem>(`/menu-items/${id}/`, payload);
   return data;
 }

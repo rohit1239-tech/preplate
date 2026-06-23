@@ -6,6 +6,7 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 DATABASES["default"]["TEST"] = {
     "NAME": env("TEST_DATABASE_NAME", default=f"test_{DATABASES['default']['NAME']}"),
+    "MIRROR": None,
 }
 
 CACHES = {

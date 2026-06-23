@@ -18,8 +18,8 @@ from apps.slots.models import DeliverySlot
 
 class CartServiceTests(TestCase):
     def setUp(self):
-        self.customer = User.objects.create_user(phone="9000000001", role=User.Role.CUSTOMER)
-        self.owner = User.objects.create_user(phone="9000000002", role=User.Role.RESTAURANT_ADMIN)
+        self.customer = User.objects.create_user(email="user9000000001@preplate.local", phone="9000000001", role=User.Role.CUSTOMER)
+        self.owner = User.objects.create_user(email="user9000000002@preplate.local", phone="9000000002", role=User.Role.RESTAURANT_ADMIN)
         self.restaurant = Restaurant.objects.create(
             owner=self.owner,
             name="Kitchen",
@@ -80,7 +80,7 @@ class CartServiceTests(TestCase):
         CartService.add_item(first_cart, self.item, 1)
         CartService.checkout(first_cart, Payment.Method.COD, self.customer)
 
-        second_customer = User.objects.create_user(phone="9000000004", role=User.Role.CUSTOMER)
+        second_customer = User.objects.create_user(email="user9000000004@preplate.local", phone="9000000004", role=User.Role.CUSTOMER)
         second_cart = CartService.initialize_cart(
             second_customer,
             self.restaurant,
@@ -120,7 +120,7 @@ class CartServiceTests(TestCase):
         from django.core.cache import cache
         cache.clear()
 
-        second_customer = User.objects.create_user(phone="9000000005", role=User.Role.CUSTOMER)
+        second_customer = User.objects.create_user(email="user9000000005@preplate.local", phone="9000000005", role=User.Role.CUSTOMER)
         second_location = DeliveryLocation.objects.create(
             restaurant=self.restaurant,
             name="Gate B",

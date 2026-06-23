@@ -2,7 +2,7 @@ import { apiClient } from "./client";
 import type { SendOtpRequest, User, VerifyOtpRequest } from "@/types";
 
 export async function sendOtp(payload: SendOtpRequest) {
-  const { data } = await apiClient.post<{ detail: string; debug_otp?: string }>("/auth/otp/send/", payload);
+  const { data } = await apiClient.post<{ detail: string }>("/auth/otp/send/", payload);
   return data;
 }
 

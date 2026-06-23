@@ -1,9 +1,13 @@
+import logging
+
 from rest_framework import viewsets
 
 from core.permissions.classes import ReadOnlyOrRestaurantOwnerOrPlatformAdmin
 
 from apps.slots.models import DeliverySlot
 from apps.slots.serializers import DeliverySlotSerializer
+
+logger = logging.getLogger(__name__)
 
 
 class DeliverySlotViewSet(viewsets.ModelViewSet):
@@ -20,3 +24,29 @@ class DeliverySlotViewSet(viewsets.ModelViewSet):
         elif self.request.user.role == "RESTAURANT_ADMIN":
             qs = qs.filter(restaurant__owner=self.request.user)
         return qs
+
+    def perform_create(self, serializer):
+        slot = serializer.save()
+        logger.info(
+            "delivery_slot_created",
+            extra={
+                "slot_id": str(slot.id),
+                "restaurant_id": str(slot.restaurant_id),
+                "actor_id": str(self.request.user.id),
+                "slot_name": slot.name,
+                "is_active": slot.is_active,
+            },
+        )
+
+    def perform_update(self, serializer):
+        slot = serializer.save()
+        logger.info(
+            "delivery_slot_updated",
+            extra={
+                "slot_id": str(slot.id),
+                "restaurant_id": str(slot.restaurant_id),
+                "actor_id": str(self.request.user.id),
+                "slot_name": slot.name,
+                "is_active": slot.is_active,
+            },
+        )

@@ -17,8 +17,8 @@ from apps.slots.models import DeliverySlot
 
 class OrderStateMachineTests(TestCase):
     def setUp(self):
-        self.customer = User.objects.create_user(phone="9100000001", role=User.Role.CUSTOMER)
-        self.owner = User.objects.create_user(phone="9100000002", role=User.Role.RESTAURANT_ADMIN)
+        self.customer = User.objects.create_user(email="user9100000001@preplate.local", phone="9100000001", role=User.Role.CUSTOMER)
+        self.owner = User.objects.create_user(email="user9100000002@preplate.local", phone="9100000002", role=User.Role.RESTAURANT_ADMIN)
         self.restaurant = Restaurant.objects.create(
             owner=self.owner,
             name="Kitchen",
