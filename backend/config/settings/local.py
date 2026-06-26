@@ -9,6 +9,8 @@ ALLOWED_HOSTS = [
 
 CORS_ALLOW_ALL_ORIGINS = True
 
+SERVE_MEDIA_FILES = env.bool("SERVE_MEDIA_FILES", default=True)
+
 EMAIL_BACKEND = env(
     "EMAIL_BACKEND",
     default=(

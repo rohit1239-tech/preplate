@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { formatMoney } from "@/lib/utils";
 import { listOrders, updateOrderStatus, verifyOrderPin } from "@/services/api";
 import { queryKeys } from "@/services/query-keys";
-import { useAuthStore } from "@/store";
+import { useOwnedRestaurant } from "@/features/restaurant-admin/use-owned-restaurant";
+import { isRestaurantOperational, RestaurantOnboardingStatus } from "@/features/restaurant-admin/restaurant-status-gate";
 import type { Order, OrderStatus } from "@/types";
 
 const nextStatus: Partial<Record<OrderStatus, OrderStatus>> = {
@@ -22,12 +23,12 @@ const nextStatus: Partial<Record<OrderStatus, OrderStatus>> = {
 };
 
 export default function RestaurantOrdersPage() {
-  const user = useAuthStore((state) => state.user);
+  const { restaurant, isRestaurantAdmin, isLoading: isRestaurantLoading } = useOwnedRestaurant();
   const queryClient = useQueryClient();
   const orders = useQuery({
     queryKey: queryKeys.orders({ restaurant: true }),
     queryFn: () => listOrders({ page_size: 50 }),
-    enabled: user?.role === "RESTAURANT_ADMIN",
+    enabled: isRestaurantAdmin && isRestaurantOperational(restaurant),
   });
   const transition = useMutation({
     mutationFn: ({ order, status }: { order: Order; status: OrderStatus }) => updateOrderStatus(order.id, { status }),
@@ -38,9 +39,11 @@ export default function RestaurantOrdersPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["orders"] }),
   });
 
-  if (user?.role !== "RESTAURANT_ADMIN") {
+  if (!isRestaurantAdmin) {
     return <main className="grid min-h-screen place-items-center bg-background px-4"><div className="max-w-md rounded-xl border border-border bg-surface p-6 text-center"><LogIn className="mx-auto size-10 text-text-muted" /><h1 className="mt-4 text-2xl font-semibold">Restaurant login required</h1><p className="mt-2 text-text-secondary">Sign in as a restaurant admin to manage orders and PIN handoff.</p><Button asChild className="mt-5"><Link href="/login?role=RESTAURANT_ADMIN">Login as restaurant admin</Link></Button></div></main>;
   }
+  if (isRestaurantLoading) return <main className="min-h-screen bg-background p-6">Loading restaurant...</main>;
+  if (!restaurant || !isRestaurantOperational(restaurant)) return <RestaurantOnboardingStatus restaurant={restaurant} />;
 
   return (
     <main className="min-h-screen bg-background px-4 py-6">

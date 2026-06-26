@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOwnedRestaurant } from "@/features/restaurant-admin/use-owned-restaurant";
+import { isRestaurantOperational, RestaurantOnboardingStatus } from "@/features/restaurant-admin/restaurant-status-gate";
 import { createSlot, listSlots, updateSlot } from "@/services/api";
 import { queryKeys } from "@/services/query-keys";
 
@@ -18,19 +19,20 @@ const defaults = {
 };
 
 export default function RestaurantSlotsPage() {
-  const { restaurant, isRestaurantAdmin } = useOwnedRestaurant();
+  const { restaurant, isRestaurantAdmin, isLoading: isRestaurantLoading } = useOwnedRestaurant();
   const queryClient = useQueryClient();
   const slots = useQuery({
     queryKey: queryKeys.slots({ restaurant: restaurant?.id, admin: true }),
     queryFn: () => listSlots({ restaurant: restaurant!.id, page_size: 10 }),
-    enabled: !!restaurant,
+    enabled: isRestaurantOperational(restaurant),
   });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["slots"] });
   const create = useMutation({ mutationFn: (name: "Lunch" | "Dinner") => createSlot({ restaurant: restaurant!.id, name, ...defaults[name], is_active: true }), onSuccess: refresh });
   const update = useMutation({ mutationFn: ({ id, payload }: { id: string; payload: Record<string, unknown> }) => updateSlot(id, payload), onSuccess: refresh });
 
   if (!isRestaurantAdmin) return <Gate />;
-  if (!restaurant) return <main className="min-h-screen bg-background p-6">Loading restaurant...</main>;
+  if (isRestaurantLoading) return <main className="min-h-screen bg-background p-6">Loading restaurant...</main>;
+  if (!restaurant || !isRestaurantOperational(restaurant)) return <RestaurantOnboardingStatus restaurant={restaurant} />;
 
   const existing = new Set(slots.data?.results.map((slot) => slot.name));
 

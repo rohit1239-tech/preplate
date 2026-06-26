@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
-import { ArrowLeft, Building2, Mail, ShieldCheck, UserRound } from "lucide-react";
+import { Building2, Mail, ShieldCheck, UserRound } from "lucide-react";
 
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
@@ -12,7 +11,15 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { firstAuthErrorField, type AuthField, type AuthFieldErrors, type AuthFormValues, type AuthMode, validateAuthForm } from "@/features/auth/validation";
 import { sendOtp } from "@/services/api";
-import type { UserRole, VerifyOtpRequest } from "@/types";
+import { useAuthStore } from "@/store";
+import type { OtpDeliveryResponse, UserRole, VerifyOtpRequest } from "@/types";
+
+
+const roleRedirects: Record<UserRole, string> = {
+  CUSTOMER: "/locations",
+  RESTAURANT_ADMIN: "/restaurant",
+  PLATFORM_ADMIN: "/admin",
+};
 
 const flowLabels: Record<UserRole, { label: string; title: string; description: string; icon: typeof UserRound }> = {
   CUSTOMER: {
@@ -53,22 +60,32 @@ function clearStoredSignup(email: string, role: UserRole) {
   window.sessionStorage.removeItem(`preplate-signup:${role}:${email}`);
 }
 
+function storeOtpDelivery(email: string, role: UserRole, delivery: OtpDeliveryResponse) {
+  window.sessionStorage.setItem(`preplate-otp-delivery:${role}:${email}`, JSON.stringify(delivery));
+}
+
 function errorClass(error?: string) {
   return error ? "border-error bg-error-surface/40 focus:border-error focus:ring-2 focus:ring-error/20" : undefined;
 }
 
 export function LoginClient({ initialRole }: { initialRole: UserRole }) {
   const router = useRouter();
+  const currentUser = useAuthStore((state) => state.user);
   const [role, setRole] = useState<UserRole>(initialRole);
-  const [mode, setMode] = useState<AuthMode>(initialRole === "PLATFORM_ADMIN" ? "login" : "signup");
+  const [mode, setMode] = useState<AuthMode>("login");
   const [values, setValues] = useState<AuthFormValues>(emptyValues);
   const [errors, setErrors] = useState<AuthFieldErrors>({});
   const fieldRefs = useRef<Partial<Record<AuthField, HTMLInputElement | HTMLTextAreaElement | null>>>({});
 
+  useEffect(() => {
+    if (currentUser) router.replace(roleRedirects[currentUser.role]);
+  }, [currentUser, router]);
+
   const mutation = useMutation({
     mutationFn: () => sendOtp({ email: values.email.trim().toLowerCase(), role, intent: mode === "signup" ? "SIGNUP" : "LOGIN" }),
-    onSuccess: () => {
+    onSuccess: (delivery) => {
       const normalizedEmail = values.email.trim().toLowerCase();
+      storeOtpDelivery(normalizedEmail, role, delivery);
       if (mode === "signup") {
         const payload: Partial<VerifyOtpRequest> = {
           first_name: values.firstName.trim(),
@@ -95,7 +112,7 @@ export function LoginClient({ initialRole }: { initialRole: UserRole }) {
 
   function chooseRole(nextRole: UserRole) {
     setRole(nextRole);
-    setMode(nextRole === "PLATFORM_ADMIN" ? "login" : "signup");
+    setMode("login");
     setErrors({});
   }
 
@@ -117,10 +134,12 @@ export function LoginClient({ initialRole }: { initialRole: UserRole }) {
 
   const selectedFlow = flowLabels[role];
 
+  if (currentUser) return <main className="grid min-h-screen place-items-center bg-background p-6">Redirecting...</main>;
+
   return (
-    <main className="grid min-h-screen bg-background px-4 py-6 md:grid-cols-[0.9fr_1.1fr] md:p-0">
-      <section className="hidden bg-primary p-10 text-white md:flex md:flex-col md:justify-between">
-        <Link href="/" className="inline-flex items-center gap-2 text-sm text-white/80"><ArrowLeft className="size-4" /> Home</Link>
+    <main className="grid min-h-screen bg-background px-4 py-6 md:h-screen md:grid-cols-[0.9fr_1.1fr] md:overflow-hidden md:p-0">
+      <section className="hidden bg-primary p-10 text-white md:flex md:h-screen md:flex-col md:justify-between md:overflow-hidden">
+        <p className="text-sm font-semibold text-white/80">Preplate</p>
         <div>
           <p className="text-sm font-medium uppercase tracking-wide text-white/50">Preplate access</p>
           <h1 className="mt-3 max-w-lg text-5xl font-semibold leading-tight">Email OTP sign in for scheduled meal operations.</h1>
@@ -128,7 +147,8 @@ export function LoginClient({ initialRole }: { initialRole: UserRole }) {
         </div>
       </section>
 
-      <section className="mx-auto flex w-full max-w-xl flex-col justify-center py-8">
+      <section className="w-full md:h-screen md:overflow-y-auto">
+        <div className="mx-auto flex min-h-full w-full max-w-xl flex-col justify-center py-8 md:px-8">
         <div>
           <p className="text-sm font-medium uppercase tracking-wide text-text-muted">Account access</p>
           <h1 className="mt-2 text-3xl font-semibold text-text-primary">{selectedFlow.title}</h1>
@@ -157,8 +177,8 @@ export function LoginClient({ initialRole }: { initialRole: UserRole }) {
 
         {role !== "PLATFORM_ADMIN" ? (
           <div className="mt-4 grid grid-cols-2 gap-2 rounded-md bg-surface-subtle p-1">
-            <button type="button" className={cn("rounded-md px-3 py-2 text-sm font-medium transition", mode === "signup" ? "bg-surface text-text-primary shadow-[var(--shadow-sm)]" : "text-text-secondary hover:text-text-primary")} onClick={() => chooseMode("signup")}>{role === "RESTAURANT_ADMIN" ? "Request onboarding" : "Create account"}</button>
             <button type="button" className={cn("rounded-md px-3 py-2 text-sm font-medium transition", mode === "login" ? "bg-surface text-text-primary shadow-[var(--shadow-sm)]" : "text-text-secondary hover:text-text-primary")} onClick={() => chooseMode("login")}>Sign in</button>
+            <button type="button" className={cn("rounded-md px-3 py-2 text-sm font-medium transition", mode === "signup" ? "bg-surface text-text-primary shadow-[var(--shadow-sm)]" : "text-text-secondary hover:text-text-primary")} onClick={() => chooseMode("signup")}>{role === "RESTAURANT_ADMIN" ? "Request onboarding" : "Create account"}</button>
           </div>
         ) : null}
 
@@ -199,6 +219,7 @@ export function LoginClient({ initialRole }: { initialRole: UserRole }) {
             <Button className="w-full" isLoading={mutation.isPending} onClick={submit}><Mail className="size-4" /> Send email OTP</Button>
             {mutation.error ? <p className="rounded-md bg-error-surface px-3 py-2 text-sm font-medium text-error">{mutation.error.message}</p> : null}
           </div>
+        </div>
         </div>
       </section>
     </main>

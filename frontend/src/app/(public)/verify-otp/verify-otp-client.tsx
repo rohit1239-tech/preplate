@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { Mail, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { OtpInput } from "@/components/ui/otp-input";
-import { sendOtp, verifyOtp } from "@/services/api";
+import { resendOtp, verifyOtp } from "@/services/api";
+import { ApiError } from "@/services/api/errors";
 import { useAuthStore } from "@/store";
 import type { AuthIntent, UserRole, VerifyOtpRequest } from "@/types";
 
@@ -37,11 +38,36 @@ function clearPendingSignup(email: string, role: UserRole) {
   if (typeof window !== "undefined") window.sessionStorage.removeItem(`preplate-signup:${role}:${email}`);
 }
 
+function readInitialCooldown(email: string, role: UserRole) {
+  if (typeof window === "undefined") return 0;
+  const key = `preplate-otp-delivery:${role}:${email}`;
+  const raw = window.sessionStorage.getItem(key);
+  if (!raw) return 0;
+  window.sessionStorage.removeItem(key);
+  try {
+    const delivery = JSON.parse(raw) as { cooldown_seconds?: unknown };
+    return typeof delivery.cooldown_seconds === "number" ? delivery.cooldown_seconds : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export function VerifyOtpClient({ email, role }: { email: string; role: UserRole }) {
   const router = useRouter();
   const [otp, setOtp] = useState("");
   const [message, setMessage] = useState("");
+  const [cooldown, setCooldown] = useState(() => readInitialCooldown(email, role));
+  const [resendLocked, setResendLocked] = useState(false);
   const setSession = useAuthStore((state) => state.setSession);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = window.setInterval(() => {
+      setCooldown((seconds) => Math.max(seconds - 1, 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [cooldown]);
+
   const verifyMutation = useMutation({
     mutationFn: () => verifyOtp({ email, otp, role, ...readPendingSignup(email, role) }),
     onSuccess: (session) => {
@@ -52,12 +78,26 @@ export function VerifyOtpClient({ email, role }: { email: string; role: UserRole
   });
 
   const resendMutation = useMutation({
-    mutationFn: () => sendOtp({ email, role, intent: getAuthIntent(email, role) }),
-    onSuccess: () => {
+    mutationFn: () => resendOtp({ email, role, intent: getAuthIntent(email, role) }),
+    onSuccess: (delivery) => {
       setOtp("");
-      setMessage("A new OTP has been sent to your email.");
+      setMessage(delivery.message ?? "OTP sent successfully.");
+      setCooldown(delivery.cooldown_seconds);
+      setResendLocked(delivery.remaining_resends <= 0);
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 429) {
+        const retryAfter = error.payload?.retry_after;
+        if (typeof retryAfter === "number") {
+          setCooldown(retryAfter);
+          return;
+        }
+        setResendLocked(true);
+      }
     },
   });
+
+  const resendDisabled = !email || verifyMutation.isPending || cooldown > 0 || resendLocked;
 
   return (
     <main className="grid min-h-screen place-items-center bg-background px-4">
@@ -70,8 +110,8 @@ export function VerifyOtpClient({ email, role }: { email: string; role: UserRole
           <Button className="w-full" isLoading={verifyMutation.isPending} disabled={!email || otp.length !== 6} onClick={() => verifyMutation.mutate()}>Verify and continue</Button>
           <div className="flex flex-col gap-2 rounded-md bg-surface-subtle p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
             <span className="text-text-secondary">Didn&apos;t receive the code?</span>
-            <Button type="button" variant="outline" size="sm" isLoading={resendMutation.isPending} disabled={!email || verifyMutation.isPending} onClick={() => resendMutation.mutate()}>
-              <Mail className="size-4" /> Resend OTP
+            <Button type="button" variant="outline" size="sm" isLoading={resendMutation.isPending} disabled={resendDisabled} onClick={() => resendMutation.mutate()}>
+              <Mail className="size-4" /> {cooldown > 0 ? `Resend OTP in ${cooldown}s` : "Resend OTP"}
             </Button>
           </div>
           {message ? <p className="rounded-md bg-success-surface px-3 py-2 text-sm font-medium text-success">{message}</p> : null}

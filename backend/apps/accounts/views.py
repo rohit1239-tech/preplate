@@ -19,9 +19,49 @@ class SendOTPView(APIView):
             request.META.get("REMOTE_ADDR"),
             serializer.validated_data["intent"],
         )
-        payload = {"detail": "OTP sent."}
+        payload = {
+            "detail": "OTP sent.",
+            "cooldown_seconds": OTPAuthService._cooldown_seconds(),
+            "remaining_resends": OTPAuthService._max_resends(),
+        }
         if settings.DEBUG:
             payload["debug_otp"] = otp
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class ResendOTPView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = SendOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            delivery = OTPAuthService.resend_otp(
+                serializer.validated_data["email"],
+                serializer.validated_data["role"],
+                serializer.validated_data["intent"],
+            )
+        except OTPAuthService.ResendCooldownError as exc:
+            return Response(
+                {
+                    "message": "Please wait before requesting another OTP.",
+                    "retry_after": exc.retry_after,
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        except OTPAuthService.ResendLimitError:
+            return Response(
+                {"message": "Maximum OTP resend attempts reached."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        payload = {
+            "message": "OTP sent successfully.",
+            "cooldown_seconds": delivery.cooldown_seconds,
+            "remaining_resends": delivery.remaining_resends,
+        }
+        if settings.DEBUG:
+            payload["debug_otp"] = delivery.otp
         return Response(payload, status=status.HTTP_200_OK)
 
 

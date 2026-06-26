@@ -1,16 +1,19 @@
-import Image from "next/image";
 import Link from "next/link";
 import { Clock, MapPin, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { pickImage, restaurantImages } from "@/lib/demo-assets";
 import type { Restaurant } from "@/types";
 
 export function RestaurantCard({ restaurant }: { restaurant: Restaurant }) {
   return (
     <Link href={`/restaurants/${restaurant.id}`} className="group block overflow-hidden rounded-xl border border-border bg-surface shadow-[var(--shadow-sm)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)]">
-      <div className="relative h-44 overflow-hidden">
-        <Image src={pickImage(restaurantImages, restaurant.id)} alt="" fill className="object-cover transition duration-500 group-hover:scale-105" sizes="(max-width: 768px) 100vw, 33vw" />
+      <div className="relative h-44 overflow-hidden bg-surface-subtle">
+        {restaurant.image ? (
+          // eslint-disable-next-line @next/next/no-img-element -- Backend media URLs are dynamic.
+          <img src={restaurant.image} alt={restaurant.name} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
+        ) : (
+          <div className="grid h-full place-items-center text-sm font-medium text-text-muted">No restaurant photo</div>
+        )}
         <div className="absolute left-3 top-3 rounded-md bg-surface px-2 py-1 text-xs font-semibold text-text-primary">Ordering open</div>
       </div>
       <div className="space-y-3 p-4">

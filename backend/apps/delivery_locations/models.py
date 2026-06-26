@@ -8,6 +8,7 @@ class DeliveryLocation(models.Model):
     restaurant = models.ForeignKey("restaurants.Restaurant", on_delete=models.CASCADE, related_name="delivery_locations")
     name = models.CharField(max_length=120)
     address = models.TextField()
+    image = models.ImageField(upload_to="delivery-locations/", blank=True)
     capacity_per_slot = models.PositiveIntegerField(default=50)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

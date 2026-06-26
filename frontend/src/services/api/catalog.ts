@@ -1,19 +1,28 @@
+import { resolveMediaUrl } from "@/lib/media";
 import { apiClient } from "./client";
 import type { DeliveryLocation, DeliverySlot, MenuCategory, MenuItem, PaginatedResponse } from "@/types";
 
+function withDeliveryLocationImage(location: DeliveryLocation): DeliveryLocation {
+  return { ...location, image: resolveMediaUrl(location.image) };
+}
+
+function withMenuItemImage(item: MenuItem): MenuItem {
+  return { ...item, image: resolveMediaUrl(item.image) };
+}
+
 export async function listDeliveryLocations(params?: Record<string, unknown>) {
   const { data } = await apiClient.get<PaginatedResponse<DeliveryLocation>>("/delivery-locations/", { params });
-  return data;
+  return { ...data, results: data.results.map(withDeliveryLocationImage) };
 }
 
-export async function createDeliveryLocation(payload: Partial<DeliveryLocation>) {
+export async function createDeliveryLocation(payload: Partial<DeliveryLocation> | FormData) {
   const { data } = await apiClient.post<DeliveryLocation>("/delivery-locations/", payload);
-  return data;
+  return withDeliveryLocationImage(data);
 }
 
-export async function updateDeliveryLocation(id: string, payload: Partial<DeliveryLocation>) {
+export async function updateDeliveryLocation(id: string, payload: Partial<DeliveryLocation> | FormData) {
   const { data } = await apiClient.patch<DeliveryLocation>(`/delivery-locations/${id}/`, payload);
-  return data;
+  return withDeliveryLocationImage(data);
 }
 
 export async function listSlots(params?: Record<string, unknown>) {
@@ -48,15 +57,15 @@ export async function updateMenuCategory(id: string, payload: Partial<MenuCatego
 
 export async function listMenuItems(params?: Record<string, unknown>) {
   const { data } = await apiClient.get<PaginatedResponse<MenuItem>>("/menu-items/", { params });
-  return data;
+  return { ...data, results: data.results.map(withMenuItemImage) };
 }
 
 export async function createMenuItem(payload: Partial<MenuItem> | FormData) {
   const { data } = await apiClient.post<MenuItem>("/menu-items/", payload);
-  return data;
+  return withMenuItemImage(data);
 }
 
 export async function updateMenuItem(id: string, payload: Partial<MenuItem> | FormData) {
   const { data } = await apiClient.patch<MenuItem>(`/menu-items/${id}/`, payload);
-  return data;
+  return withMenuItemImage(data);
 }

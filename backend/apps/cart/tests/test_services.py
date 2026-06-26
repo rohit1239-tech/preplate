@@ -93,6 +93,35 @@ class CartServiceTests(TestCase):
         with self.assertRaises(ValidationError):
             CartService.checkout(second_cart, Payment.Method.COD, second_customer)
 
+    def test_initialize_cart_rejects_slot_from_another_restaurant(self):
+        other_owner = User.objects.create_user(
+            email="user9000000006@preplate.local",
+            phone="9000000006",
+            role=User.Role.RESTAURANT_ADMIN,
+        )
+        other_restaurant = Restaurant.objects.create(
+            owner=other_owner,
+            name="Other Kitchen",
+            phone="9000000007",
+            status=Restaurant.Status.APPROVED,
+        )
+        other_slot = DeliverySlot.objects.create(
+            restaurant=other_restaurant,
+            name="Lunch",
+            cutoff_time=time(11, 45),
+            delivery_start_time=time(12, 30),
+            delivery_end_time=time(13, 30),
+        )
+
+        with self.assertRaises(ValidationError):
+            CartService.initialize_cart(
+                self.customer,
+                self.restaurant,
+                self.location,
+                other_slot,
+                timezone.localdate() + timedelta(days=1),
+            )
+
     def test_past_delivery_date_is_rejected(self):
         cart = Cart.objects.create(
             customer=self.customer,

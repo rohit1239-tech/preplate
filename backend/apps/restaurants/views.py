@@ -1,6 +1,7 @@
 import logging
 
 from rest_framework import decorators, permissions, response, viewsets
+from rest_framework.exceptions import PermissionDenied
 
 from apps.restaurants.models import Restaurant
 from apps.restaurants.serializers import RestaurantSerializer
@@ -22,11 +23,14 @@ class RestaurantViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         restaurant = serializer.save(owner=self.request.user)
-        logger.info("restaurant_created", extra={"restaurant_id": str(restaurant.id), "owner_id": str(self.request.user.id), "status": restaurant.status})
+        logger.info("restaurant_created", extra={"restaurant_id": str(restaurant.id), "owner_id": str(self.request.user.id), "status": restaurant.status, "has_image": bool(restaurant.image)})
 
     def perform_update(self, serializer):
+        restaurant = self.get_object()
+        if self.request.user.role == "RESTAURANT_ADMIN" and restaurant.status != Restaurant.Status.APPROVED:
+            raise PermissionDenied("Your restaurant must be approved before settings can be changed.")
         restaurant = serializer.save()
-        logger.info("restaurant_updated", extra={"restaurant_id": str(restaurant.id), "actor_id": str(self.request.user.id), "status": restaurant.status, "is_active": restaurant.is_active})
+        logger.info("restaurant_updated", extra={"restaurant_id": str(restaurant.id), "actor_id": str(self.request.user.id), "status": restaurant.status, "is_active": restaurant.is_active, "has_image": bool(restaurant.image)})
 
     @decorators.action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def approve(self, request, pk=None):

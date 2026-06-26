@@ -29,6 +29,11 @@ const restaurantStatusVariant: Record<string, "neutral" | "success" | "warning" 
   REJECTED: "error",
 };
 
+function ownerName(restaurant: Restaurant) {
+  const name = `${restaurant.owner_first_name ?? ""} ${restaurant.owner_last_name ?? ""}`.trim();
+  return name || "Owner name not provided";
+}
+
 export default function AdminDashboard() {
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
@@ -203,16 +208,29 @@ function Kpi({ label, value, icon, tone = "neutral" }: { label: string; value: s
 function RestaurantApprovalRow({ restaurant, isApproving, isRejecting, onApprove, onReject }: { restaurant: Restaurant; isApproving: boolean; isRejecting: boolean; onApprove: () => void; onReject: () => void }) {
   return (
     <div className="rounded-md border border-border bg-background p-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-semibold text-text-primary">{restaurant.name}</p>
-            <Badge variant="warning">Pending</Badge>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 space-y-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-semibold text-text-primary">{restaurant.name}</p>
+              <Badge variant="warning">Pending</Badge>
+            </div>
+            <p className="mt-1 text-sm text-text-secondary">{restaurant.description || "No description provided."}</p>
           </div>
-          <p className="mt-1 text-sm text-text-secondary">{restaurant.description || "No description provided."}</p>
-          <p className="mt-1 text-xs text-text-muted">Phone {restaurant.phone || "not set"}</p>
+          <div className="grid gap-2 rounded-md bg-surface px-3 py-2 text-xs text-text-secondary sm:grid-cols-2">
+            <div>
+              <span className="font-medium text-text-muted">Owner</span>
+              <p className="mt-0.5 font-medium text-text-primary">{ownerName(restaurant)}</p>
+              <p className="mt-0.5 break-all">{restaurant.owner_email || "Email not set"}</p>
+              <p className="mt-0.5">{restaurant.owner_phone || "Owner phone not set"}</p>
+            </div>
+            <div>
+              <span className="font-medium text-text-muted">Restaurant contact</span>
+              <p className="mt-0.5 font-medium text-text-primary">{restaurant.phone || "Phone not set"}</p>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 lg:justify-end">
           <Button size="sm" isLoading={isApproving} onClick={onApprove}><CheckCircle2 className="size-4" /> Approve</Button>
           <Button size="sm" variant="destructive" isLoading={isRejecting} onClick={onReject}><XCircle className="size-4" /> Reject</Button>
         </div>
@@ -227,7 +245,9 @@ function RestaurantListRow({ restaurant }: { restaurant: Restaurant }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate font-medium text-text-primary">{restaurant.name}</p>
-          <p className="mt-1 text-xs text-text-muted">{restaurant.phone || "No phone"}</p>
+          <p className="mt-1 text-xs text-text-muted">Restaurant {restaurant.phone || "phone not set"}</p>
+          <p className="mt-1 truncate text-xs text-text-secondary">Owner {ownerName(restaurant)}</p>
+          <p className="mt-0.5 truncate text-xs text-text-muted">{restaurant.owner_phone || restaurant.owner_email || "Owner contact not set"}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           <Badge variant={restaurantStatusVariant[restaurant.status] ?? "neutral"}>{restaurant.status.toLowerCase()}</Badge>

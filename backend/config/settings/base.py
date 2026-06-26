@@ -168,9 +168,11 @@ STATIC_URL = "static/"
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-MEDIA_URL = "media/"
+MEDIA_URL = "/media/"
 
 MEDIA_ROOT = BASE_DIR / "media"
+
+SERVE_MEDIA_FILES = False
 
 # ------------------------------------------------------------------------------
 # DEFAULT PK
@@ -204,6 +206,14 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
 }
+
+# ------------------------------------------------------------------------------
+# OTP
+# ------------------------------------------------------------------------------
+
+OTP_RESEND_COOLDOWN_SECONDS = env.int("OTP_RESEND_COOLDOWN_SECONDS", default=30)
+OTP_MAX_RESENDS = env.int("OTP_MAX_RESENDS", default=3)
+OTP_EXPIRY_SECONDS = env.int("OTP_EXPIRY_SECONDS", default=300)
 
 # ------------------------------------------------------------------------------
 # CORS

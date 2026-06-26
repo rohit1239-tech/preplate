@@ -10,25 +10,26 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOwnedRestaurant } from "@/features/restaurant-admin/use-owned-restaurant";
+import { isRestaurantOperational, RestaurantOnboardingStatus } from "@/features/restaurant-admin/restaurant-status-gate";
 import { createMenuCategory, createMenuItem, listMenuCategories, listMenuItems, updateMenuCategory, updateMenuItem } from "@/services/api";
 import { queryKeys } from "@/services/query-keys";
 import { formatMoney } from "@/lib/utils";
 import type { MenuCategory, MenuItem } from "@/types";
 
 export default function RestaurantMenuPage() {
-  const { restaurant, isRestaurantAdmin } = useOwnedRestaurant();
+  const { restaurant, isRestaurantAdmin, isLoading: isRestaurantLoading } = useOwnedRestaurant();
   const queryClient = useQueryClient();
 
   const categories = useQuery({
     queryKey: queryKeys.menuCategories({ restaurant: restaurant?.id, admin: true }),
     queryFn: () => listMenuCategories({ restaurant: restaurant!.id, page_size: 50 }),
-    enabled: !!restaurant,
+    enabled: isRestaurantOperational(restaurant),
   });
 
   const items = useQuery({
     queryKey: queryKeys.menuItems({ restaurant: restaurant?.id, admin: true }),
     queryFn: () => listMenuItems({ restaurant: restaurant!.id, page_size: 100 }),
-    enabled: !!restaurant,
+    enabled: isRestaurantOperational(restaurant),
   });
 
   const refresh = () => {
@@ -50,7 +51,8 @@ export default function RestaurantMenuPage() {
   const updateItem = useMutation({ mutationFn: ({ id, payload }: { id: string; payload: Partial<MenuItem> | FormData }) => updateMenuItem(id, payload), onSuccess: refresh });
 
   if (!isRestaurantAdmin) return <Gate />;
-  if (!restaurant) return <main className="min-h-screen bg-background p-6">Loading restaurant...</main>;
+  if (isRestaurantLoading) return <main className="min-h-screen bg-background p-6">Loading restaurant...</main>;
+  if (!restaurant || !isRestaurantOperational(restaurant)) return <RestaurantOnboardingStatus restaurant={restaurant} />;
 
   const categoryList = categories.data?.results ?? [];
   const itemList = items.data?.results ?? [];

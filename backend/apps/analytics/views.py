@@ -32,8 +32,10 @@ class RestaurantAnalyticsView(APIView):
     def get(self, request):
         if request.user.role != "RESTAURANT_ADMIN":
             self.permission_denied(request)
+        if not Restaurant.objects.filter(owner=request.user, status=Restaurant.Status.APPROVED).exists():
+            self.permission_denied(request, message="Your restaurant must be approved before analytics are available.")
         today = timezone.localdate()
-        today_orders = Order.objects.filter(restaurant__owner=request.user, delivery_date=today)
+        today_orders = Order.objects.filter(restaurant__owner=request.user, restaurant__status=Restaurant.Status.APPROVED, delivery_date=today)
         return Response(
             {
                 "orders_today": today_orders.count(),

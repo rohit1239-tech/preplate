@@ -22,7 +22,7 @@ class DeliveryLocationViewSet(viewsets.ModelViewSet):
         if not self.request.user.is_authenticated or self.request.user.role == "CUSTOMER":
             qs = qs.filter(is_active=True, restaurant__status="APPROVED", restaurant__is_active=True)
         elif self.request.user.role == "RESTAURANT_ADMIN":
-            qs = qs.filter(restaurant__owner=self.request.user)
+            qs = qs.filter(restaurant__owner=self.request.user, restaurant__status="APPROVED")
         return qs
 
     def perform_create(self, serializer):
@@ -34,6 +34,7 @@ class DeliveryLocationViewSet(viewsets.ModelViewSet):
                 "restaurant_id": str(location.restaurant_id),
                 "actor_id": str(self.request.user.id),
                 "is_active": location.is_active,
+                "has_image": bool(location.image),
             },
         )
 
@@ -47,5 +48,6 @@ class DeliveryLocationViewSet(viewsets.ModelViewSet):
                 "actor_id": str(self.request.user.id),
                 "is_active": location.is_active,
                 "capacity_per_slot": location.capacity_per_slot,
+                "has_image": bool(location.image),
             },
         )

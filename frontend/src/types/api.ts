@@ -1,9 +1,10 @@
 import type { UserRole } from "./domain";
 
-export interface ApiErrorPayload { code: string; message: string | Record<string, unknown>; }
+export interface ApiErrorPayload { code?: string; message: string | Record<string, unknown>; retry_after?: number; }
 export interface TokenPair { access: string; refresh: string; }
 export type AuthIntent = "LOGIN" | "SIGNUP";
 export interface SendOtpRequest { email: string; role: UserRole; intent: AuthIntent; }
+export interface OtpDeliveryResponse { detail?: string; message?: string; cooldown_seconds: number; remaining_resends: number; debug_otp?: string; }
 export interface VerifyOtpRequest {
   email: string;
   otp: string;

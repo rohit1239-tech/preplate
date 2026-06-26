@@ -1,8 +1,6 @@
-import Image from "next/image";
 import { Minus, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { foodImages, pickImage } from "@/lib/demo-assets";
 import { formatMoney } from "@/lib/utils";
 import { useLocalCartStore } from "@/store";
 import type { MenuItem, Restaurant } from "@/types";
@@ -19,8 +17,13 @@ export function MenuItemCard({ item, restaurant }: { item: MenuItem; restaurant:
         <p className="mt-3 text-sm font-semibold text-text-primary">{formatMoney(item.price)}</p>
       </div>
       <div className="space-y-2">
-        <div className="relative h-24 overflow-hidden rounded-lg bg-surface-subtle">
-          <Image src={pickImage(foodImages, item.id)} alt="" fill className="object-cover" sizes="112px" />
+        <div className="h-24 overflow-hidden rounded-lg bg-surface-subtle">
+          {item.image ? (
+            // eslint-disable-next-line @next/next/no-img-element -- Backend media URLs are dynamic.
+            <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+          ) : (
+            <div className="grid h-full place-items-center px-2 text-center text-xs font-medium text-text-muted">No item photo</div>
+          )}
         </div>
         {quantity ? (
           <div className="grid h-9 grid-cols-3 overflow-hidden rounded-md border border-primary bg-primary text-surface">

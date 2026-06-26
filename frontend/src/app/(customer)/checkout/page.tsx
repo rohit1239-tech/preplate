@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { Lock, Mail } from "lucide-react";
@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { OtpInput } from "@/components/ui/otp-input";
 import { cn, formatMoney } from "@/lib/utils";
 import { firstAuthErrorField, type AuthField, type AuthFieldErrors, type AuthFormValues, type AuthMode, validateAuthForm } from "@/features/auth/validation";
-import { addCartItem, checkoutCart, initializeCart, sendOtp, verifyOtp } from "@/services/api";
+import { addCartItem, checkoutCart, initializeCart, resendOtp, sendOtp, verifyOtp } from "@/services/api";
+import { ApiError } from "@/services/api/errors";
 import { getCartTotal, useAuthStore, useLocalCartStore, useOrderContextStore } from "@/store";
 import type { VerifyOtpRequest } from "@/types";
 
@@ -37,6 +38,8 @@ export default function CheckoutPage() {
   const [otp, setOtp] = useState("");
   const [message, setMessage] = useState("");
   const [otpSent, setOtpSent] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const [resendLocked, setResendLocked] = useState(false);
   const fieldRefs = useRef<Partial<Record<AuthField, HTMLInputElement | HTMLTextAreaElement | null>>>({});
   const { user, setSession } = useAuthStore();
   const { restaurant, items, clear } = useLocalCartStore();
@@ -45,10 +48,31 @@ export default function CheckoutPage() {
 
   const sendOtpMutation = useMutation({
     mutationFn: () => sendOtp({ email: values.email.trim().toLowerCase(), role: "CUSTOMER", intent: mode === "signup" ? "SIGNUP" : "LOGIN" }),
-    onSuccess: () => {
+    onSuccess: (delivery) => {
       setOtpSent(true);
       setOtp("");
+      setCooldown(delivery.cooldown_seconds);
+      setResendLocked(delivery.remaining_resends <= 0);
       setMessage("OTP sent. Check your email for the verification code.");
+    },
+  });
+  const resendOtpMutation = useMutation({
+    mutationFn: () => resendOtp({ email: values.email.trim().toLowerCase(), role: "CUSTOMER", intent: mode === "signup" ? "SIGNUP" : "LOGIN" }),
+    onSuccess: (delivery) => {
+      setOtp("");
+      setCooldown(delivery.cooldown_seconds);
+      setResendLocked(delivery.remaining_resends <= 0);
+      setMessage(delivery.message ?? "OTP sent successfully.");
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 429) {
+        const retryAfter = error.payload?.retry_after;
+        if (typeof retryAfter === "number") {
+          setCooldown(retryAfter);
+          return;
+        }
+        setResendLocked(true);
+      }
     },
   });
   const verifyOtpMutation = useMutation({
@@ -85,19 +109,41 @@ export default function CheckoutPage() {
   function chooseMode(nextMode: AuthMode) {
     setMode(nextMode);
     setErrors({});
+    setCooldown(0);
+    setResendLocked(false);
   }
 
-  function sendOtpForCheckout() {
+  function validateOtpIdentity() {
     setMessage("");
     const nextErrors = validateAuthForm(values, "CUSTOMER", mode);
     setErrors(nextErrors);
     const firstInvalid = firstAuthErrorField(nextErrors);
     if (firstInvalid) {
       fieldRefs.current[firstInvalid]?.focus();
-      return;
+      return false;
     }
+    return true;
+  }
+
+  function sendOtpForCheckout() {
+    if (!validateOtpIdentity()) return;
     sendOtpMutation.mutate();
   }
+
+  function resendOtpForCheckout() {
+    if (!validateOtpIdentity()) return;
+    resendOtpMutation.mutate();
+  }
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = window.setInterval(() => {
+      setCooldown((seconds) => Math.max(seconds - 1, 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [cooldown]);
+
+  const resendDisabled = verifyOtpMutation.isPending || cooldown > 0 || resendLocked;
 
   return (
     <main className="min-h-screen bg-background px-4 py-6">
@@ -130,7 +176,7 @@ export default function CheckoutPage() {
                 </div>
               ) : null}
 
-              <Button onClick={sendOtpForCheckout} isLoading={sendOtpMutation.isPending}><Mail className="size-4" /> {otpSent ? "Resend email OTP" : "Send email OTP"}</Button>
+              <Button onClick={sendOtpForCheckout} isLoading={sendOtpMutation.isPending}><Mail className="size-4" /> Send email OTP</Button>
 
               <FormField label="OTP" required helperText="Enter the six digit code from your email.">
                 <OtpInput value={otp} onChange={setOtp} disabled={verifyOtpMutation.isPending} />
@@ -138,14 +184,15 @@ export default function CheckoutPage() {
               {otpSent ? (
                 <div className="flex flex-col gap-2 rounded-md bg-surface-subtle p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                   <span className="text-text-secondary">Didn&apos;t receive the code?</span>
-                  <Button type="button" variant="outline" size="sm" isLoading={sendOtpMutation.isPending} disabled={verifyOtpMutation.isPending} onClick={sendOtpForCheckout}>
-                    <Mail className="size-4" /> Resend OTP
+                  <Button type="button" variant="outline" size="sm" isLoading={resendOtpMutation.isPending} disabled={resendDisabled} onClick={resendOtpForCheckout}>
+                    <Mail className="size-4" /> {cooldown > 0 ? `Resend OTP in ${cooldown}s` : "Resend OTP"}
                   </Button>
                 </div>
               ) : null}
               <Button onClick={() => verifyOtpMutation.mutate()} disabled={otp.length !== 6} isLoading={verifyOtpMutation.isPending}><Lock className="size-4" /> Verify and continue</Button>
               {message ? <p className="rounded-md bg-success-surface px-3 py-2 text-sm font-medium text-success">{message}</p> : null}
               {sendOtpMutation.error ? <p className="rounded-md bg-error-surface px-3 py-2 text-sm font-medium text-error">{sendOtpMutation.error.message}</p> : null}
+              {resendOtpMutation.error ? <p className="rounded-md bg-error-surface px-3 py-2 text-sm font-medium text-error">{resendOtpMutation.error.message}</p> : null}
               {verifyOtpMutation.error ? <p className="rounded-md bg-error-surface px-3 py-2 text-sm font-medium text-error">{verifyOtpMutation.error.message}</p> : null}
             </div>
           ) : <div className="mt-6 rounded-lg bg-success-surface p-4 text-success">Logged in as {user.email}</div>}

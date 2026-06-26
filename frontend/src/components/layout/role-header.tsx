@@ -25,7 +25,6 @@ export function RoleHeader({ title, description, action }: { title: string; desc
   const router = useRouter();
   const pathname = usePathname();
   const { user, clearSession } = useAuthStore();
-  const homeHref = user ? roleHome[user.role] : "/";
 
   function logout() {
     clearSession();
@@ -37,7 +36,7 @@ export function RoleHeader({ title, description, action }: { title: string; desc
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-text-muted">
-            <Link href={homeHref} className="inline-flex items-center gap-1 font-medium text-text-secondary hover:text-text-primary"><Home className="size-4" /> Home</Link>
+            {user ? <Link href={roleHome[user.role]} className="inline-flex items-center gap-1 font-medium text-text-secondary hover:text-text-primary"><Home className="size-4" /> Home</Link> : null}
             {user ? <span className="rounded-sm bg-surface-subtle px-2 py-1 text-xs font-medium">{roleLabel[user.role]}</span> : null}
           </div>
           <h1 className="text-3xl font-semibold text-text-primary">{title}</h1>

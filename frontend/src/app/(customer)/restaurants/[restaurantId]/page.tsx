@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -8,7 +7,6 @@ import { ArrowLeft, Clock, ShoppingBag, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { MenuItemCard } from "@/features/menu/menu-item-card";
-import { pickImage, restaurantImages } from "@/lib/demo-assets";
 import { listMenuItems, getRestaurant } from "@/services/api";
 import { queryKeys } from "@/services/query-keys";
 import { getCartTotal, useLocalCartStore } from "@/store";
@@ -28,7 +26,12 @@ export default function RestaurantMenuPage() {
   return (
     <main className="min-h-screen bg-background pb-28">
       <section className="relative h-72 overflow-hidden text-white">
-        <Image src={pickImage(restaurantImages, restaurantId)} alt="" fill priority className="object-cover" sizes="100vw" />
+        {restaurant.data.image ? (
+          // eslint-disable-next-line @next/next/no-img-element -- Backend media URLs are dynamic.
+          <img src={restaurant.data.image} alt={restaurant.data.name} className="absolute inset-0 h-full w-full object-cover" />
+        ) : (
+          <div className="absolute inset-0 grid place-items-center bg-surface-subtle text-text-muted">No restaurant photo</div>
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/20" />
         <div className="relative mx-auto flex h-full max-w-6xl flex-col justify-between px-4 py-5">
           <Link href="/restaurants" className="inline-flex w-fit items-center gap-2 rounded-md bg-black/30 px-3 py-2 text-sm font-medium backdrop-blur"><ArrowLeft className="size-4" /> Restaurants</Link>

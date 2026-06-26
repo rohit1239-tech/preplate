@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.slots.models import DeliverySlot
+from apps.restaurants.models import Restaurant
 
 
 class DeliverySlotSerializer(serializers.ModelSerializer):
@@ -30,6 +31,8 @@ class DeliverySlotSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated and request.user.role == "RESTAURANT_ADMIN":
             if restaurant.owner_id != request.user.id:
                 raise serializers.ValidationError("You can only manage your own restaurant.")
+            if restaurant.status != Restaurant.Status.APPROVED:
+                raise serializers.ValidationError("Your restaurant must be approved before this can be managed.")
         return restaurant
 
     def validate(self, attrs):

@@ -19,9 +19,10 @@ def _mask_email(email: str) -> str:
 def send_otp_email_task(self, email: str, otp: str) -> int:
     masked_email = _mask_email(email)
     logger.info("otp_email_send_started", extra={"email": masked_email, "task_id": self.request.id})
+    expiry_minutes = max(1, int(getattr(settings, "OTP_EXPIRY_SECONDS", 300)) // 60)
     sent_count = send_mail(
         "Your Preplate verification code",
-        f"Your Preplate verification code is {otp}. It expires in 5 minutes.",
+        f"Your Preplate verification code is {otp}. It expires in {expiry_minutes} minutes.",
         getattr(settings, "DEFAULT_FROM_EMAIL", None),
         [email],
         fail_silently=False,

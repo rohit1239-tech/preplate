@@ -15,7 +15,7 @@ class OrderViewSet(viewsets.ReadOnlyModelViewSet):
         if user.role == "PLATFORM_ADMIN":
             return qs
         if user.role == "RESTAURANT_ADMIN":
-            return qs.filter(restaurant__owner=user)
+            return qs.filter(restaurant__owner=user, restaurant__status="APPROVED")
         return qs.filter(customer=user)
 
     @decorators.action(detail=True, methods=["patch"], url_path="status")

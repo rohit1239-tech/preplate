@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/utils";
 import { useOwnedRestaurant } from "@/features/restaurant-admin/use-owned-restaurant";
+import { isRestaurantOperational, RestaurantOnboardingStatus } from "@/features/restaurant-admin/restaurant-status-gate";
 import { getRestaurantAnalytics, listOrders } from "@/services/api";
 import { queryKeys } from "@/services/query-keys";
 import type { Order, OrderStatus } from "@/types";
@@ -32,21 +33,23 @@ type RestaurantAnalytics = {
 };
 
 export default function RestaurantDashboard() {
-  const { restaurant, isRestaurantAdmin } = useOwnedRestaurant();
+  const { restaurant, isRestaurantAdmin, isLoading: isRestaurantLoading } = useOwnedRestaurant();
   const orders = useQuery({
     queryKey: queryKeys.orders({ role: "restaurant", page_size: 50 }),
     queryFn: () => listOrders({ page_size: 50 }),
-    enabled: isRestaurantAdmin,
+    enabled: isRestaurantAdmin && isRestaurantOperational(restaurant),
   });
   const analytics = useQuery({
     queryKey: queryKeys.analytics("restaurant"),
     queryFn: () => getRestaurantAnalytics() as Promise<RestaurantAnalytics>,
-    enabled: isRestaurantAdmin,
+    enabled: isRestaurantAdmin && isRestaurantOperational(restaurant),
   });
 
   if (!isRestaurantAdmin) {
     return <main className="grid min-h-screen place-items-center bg-background px-4"><Button asChild><Link href="/login?role=RESTAURANT_ADMIN">Login as restaurant admin</Link></Button></main>;
   }
+  if (isRestaurantLoading) return <main className="min-h-screen bg-background p-6">Loading restaurant...</main>;
+  if (!restaurant || !isRestaurantOperational(restaurant)) return <RestaurantOnboardingStatus restaurant={restaurant} />;
 
   const allOrders = orders.data?.results ?? [];
   const ongoingOrders = allOrders.filter((order) => activeStatuses.includes(order.status)).slice(0, 5);
