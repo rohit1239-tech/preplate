@@ -196,7 +196,8 @@ function CreateItemForm({ restaurantId, categories, isPending, onSubmit }: { res
         className="mt-4 grid gap-3"
         onSubmit={async (event) => {
           event.preventDefault();
-          const raw = new FormData(event.currentTarget);
+          const form = event.currentTarget;
+          const raw = new FormData(form);
           const payload = new FormData();
           payload.set("restaurant", restaurantId);
           payload.set("category", String(raw.get("category") ?? ""));
@@ -207,7 +208,7 @@ function CreateItemForm({ restaurantId, categories, isPending, onSubmit }: { res
           payload.set("is_active", "true");
           if (selectedImage) payload.set("image", selectedImage);
           await onSubmit(payload);
-          event.currentTarget.reset();
+          form.reset();
           clearSelectedImage();
         }}
       >
@@ -275,7 +276,8 @@ function MenuItemEditor({ item, categories, isPending, onUpdate }: { item: MenuI
       className="rounded-md border border-border bg-background p-4"
       onSubmit={async (event) => {
         event.preventDefault();
-        const raw = new FormData(event.currentTarget);
+        const form = event.currentTarget;
+        const raw = new FormData(form);
         const payload = new FormData();
         payload.set("category", String(raw.get("category") ?? item.category));
         payload.set("name", String(raw.get("name") ?? item.name));
