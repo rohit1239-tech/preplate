@@ -7,7 +7,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
 from apps.cart.views import CartViewSet
-from apps.delivery_locations.views import DeliveryLocationViewSet
+from apps.delivery_locations.views import DeliveryLocationViewSet, LocationRequestViewSet, RestaurantDeliveryLocationViewSet
 from apps.menus.views import MenuCategoryViewSet, MenuItemViewSet
 from apps.notifications.views import NotificationViewSet
 from apps.orders.views import OrderViewSet
@@ -17,6 +17,8 @@ from apps.slots.views import DeliverySlotViewSet
 router = DefaultRouter()
 router.register("restaurants", RestaurantViewSet, basename="restaurant")
 router.register("delivery-locations", DeliveryLocationViewSet, basename="delivery-location")
+router.register("restaurant-delivery-locations", RestaurantDeliveryLocationViewSet, basename="restaurant-delivery-location")
+router.register("location-requests", LocationRequestViewSet, basename="location-request")
 router.register("slots", DeliverySlotViewSet, basename="slot")
 router.register("menu-categories", MenuCategoryViewSet, basename="menu-category")
 router.register("menu-items", MenuItemViewSet, basename="menu-item")

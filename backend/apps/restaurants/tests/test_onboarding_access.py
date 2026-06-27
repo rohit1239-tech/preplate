@@ -4,6 +4,7 @@ from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 from apps.restaurants.models import Restaurant
+from apps.slots.models import DeliverySlot
 
 
 @override_settings(ALLOWED_HOSTS=["testserver", "localhost", "127.0.0.1"], DEBUG=True)
@@ -65,6 +66,22 @@ class PendingRestaurantAccessTests(TestCase):
         self.assertIsNone(restaurant["owner_first_name"])
         self.assertIsNone(restaurant["owner_last_name"])
         self.assertIsNone(restaurant["owner_phone"])
+
+    def test_approval_creates_default_slots_without_duplicates(self) -> None:
+        admin = User.objects.create_user(
+            email="platform-slots-admin@preplate.local",
+            role=User.Role.PLATFORM_ADMIN,
+            phone="9999000388",
+        )
+        self.client.force_authenticate(admin)
+
+        first = self.client.post(f"/api/v1/restaurants/{self.restaurant.id}/approve/")
+        second = self.client.post(f"/api/v1/restaurants/{self.restaurant.id}/approve/")
+
+        self.assertEqual(first.status_code, status.HTTP_200_OK, first.json())
+        self.assertEqual(second.status_code, status.HTTP_200_OK, second.json())
+        self.assertEqual(DeliverySlot.objects.filter(restaurant=self.restaurant, name="Lunch").count(), 1)
+        self.assertEqual(DeliverySlot.objects.filter(restaurant=self.restaurant, name="Dinner").count(), 1)
 
     def test_pending_owner_cannot_update_restaurant_settings(self) -> None:
         response = self.client.patch(

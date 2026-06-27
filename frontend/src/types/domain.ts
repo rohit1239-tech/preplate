@@ -7,7 +7,10 @@ export type PaymentStatus = "PENDING" | "SUCCESS" | "FAILED";
 export interface PaginatedResponse<T> { count: number; next: string | null; previous: string | null; results: T[]; }
 export interface User { id: string; email: string; phone: string | null; first_name: string; last_name: string; role: UserRole; }
 export interface Restaurant { id: string; owner: string; owner_email: string | null; owner_first_name: string | null; owner_last_name: string | null; owner_phone: string | null; name: string; description: string; image: string; phone: string; status: string; is_active: boolean; }
-export interface DeliveryLocation { id: string; restaurant: string; name: string; address: string; image: string; capacity_per_slot: number; is_active: boolean; }
+export interface DeliveryLocation { id: string; name: string; address: string; latitude: string | null; longitude: string | null; is_active: boolean; }
+export interface RestaurantDeliveryLocation { id: string; restaurant: string; delivery_location: string; location_name: string; location_address: string; location_latitude: string | null; location_longitude: string | null; capacity_per_slot: number; is_active: boolean; }
+export type LocationRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
+export interface LocationRequest { id: string; requester: string; requester_email: string | null; restaurant: string | null; restaurant_name: string | null; name: string; address: string; latitude: string | null; longitude: string | null; note: string; status: LocationRequestStatus; matched_location: string | null; matched_location_name: string | null; matched_request: string | null; matched_request_name: string | null; created_location: string | null; created_location_name: string | null; reviewed_by: string | null; reviewed_at: string | null; created_at: string; updated_at: string; }
 export interface DeliverySlot { id: string; restaurant: string; name: string; cutoff_time: string; delivery_start_time: string; delivery_end_time: string; is_active: boolean; }
 export interface MenuCategory { id: string; restaurant: string; name: string; display_order: number; is_active: boolean; }
 export interface MenuItem { id: string; restaurant: string; category: string; name: string; description: string; price: string; image: string; is_available: boolean; is_active: boolean; }

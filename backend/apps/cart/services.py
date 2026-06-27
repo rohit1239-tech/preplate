@@ -8,6 +8,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.cart.models import Cart, CartItem
+from apps.delivery_locations.models import RestaurantDeliveryLocation
 from apps.menus.models import MenuItem
 from apps.orders.models import Order, OrderItem, OrderStatusHistory
 from apps.payments.models import Payment
@@ -34,6 +35,7 @@ class CartValidationService:
             raise ValidationError("Slot is not available.")
         if not cart.delivery_location.is_active:
             raise ValidationError("Delivery location is not available.")
+        cls.get_service_location(cart)
         if not cart.items.exists():
             raise ValidationError("Cart has no items.")
         cls.validate_cutoff(cart)
@@ -42,10 +44,24 @@ class CartValidationService:
             raise ValidationError("Some cart items are no longer available.")
 
     @classmethod
+    def get_service_location(cls, cart: Cart) -> RestaurantDeliveryLocation:
+        try:
+            return RestaurantDeliveryLocation.objects.get(
+                restaurant=cart.restaurant,
+                delivery_location=cart.delivery_location,
+                is_active=True,
+                delivery_location__is_active=True,
+            )
+        except RestaurantDeliveryLocation.DoesNotExist as exc:
+            raise ValidationError("Restaurant does not serve this delivery location.") from exc
+
+    @classmethod
     def validate_capacity(cls, cart: Cart) -> None:
+        service_location = cls.get_service_location(cart)
         current_orders = (
             Order.objects.select_for_update()
             .filter(
+                restaurant=cart.restaurant,
                 delivery_location=cart.delivery_location,
                 slot=cart.slot,
                 delivery_date=cart.delivery_date,
@@ -53,8 +69,8 @@ class CartValidationService:
             .exclude(status=Order.Status.CANCELLED)
             .count()
         )
-        if current_orders >= cart.delivery_location.capacity_per_slot:
-            raise ValidationError("Delivery location capacity exceeded for this slot.")
+        if current_orders >= service_location.capacity_per_slot:
+            raise ValidationError("Restaurant delivery capacity exceeded for this location and slot.")
 
 
 class CartService:
@@ -62,9 +78,12 @@ class CartService:
     @transaction.atomic
     def initialize_cart(cls, customer, restaurant, delivery_location, slot, delivery_date) -> Cart:
         logger.info("cart_initialize_requested", extra={"user_id": str(customer.id), "restaurant_id": str(restaurant.id), "delivery_location_id": str(delivery_location.id), "slot_id": str(slot.id), "delivery_date": delivery_date})
-        if delivery_location.restaurant_id != restaurant.id or slot.restaurant_id != restaurant.id:
-            logger.warning("cart_initialize_rejected_mismatched_scope", extra={"user_id": str(customer.id), "restaurant_id": str(restaurant.id), "delivery_location_id": str(delivery_location.id), "slot_id": str(slot.id)})
-            raise ValidationError("Location and slot must belong to the selected restaurant.")
+        if slot.restaurant_id != restaurant.id:
+            logger.warning("cart_initialize_rejected_mismatched_slot", extra={"user_id": str(customer.id), "restaurant_id": str(restaurant.id), "delivery_location_id": str(delivery_location.id), "slot_id": str(slot.id)})
+            raise ValidationError("Slot must belong to the selected restaurant.")
+        if not RestaurantDeliveryLocation.objects.filter(restaurant=restaurant, delivery_location=delivery_location, is_active=True, delivery_location__is_active=True).exists():
+            logger.warning("cart_initialize_rejected_unserved_location", extra={"user_id": str(customer.id), "restaurant_id": str(restaurant.id), "delivery_location_id": str(delivery_location.id), "slot_id": str(slot.id)})
+            raise ValidationError("Restaurant does not serve this delivery location.")
         abandoned_count = Cart.objects.filter(customer=customer, status=Cart.Status.ACTIVE).update(status=Cart.Status.ABANDONED)
         if abandoned_count:
             logger.info("active_carts_abandoned", extra={"user_id": str(customer.id), "count": abandoned_count})

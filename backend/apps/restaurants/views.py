@@ -5,6 +5,7 @@ from rest_framework.exceptions import PermissionDenied
 
 from apps.restaurants.models import Restaurant
 from apps.restaurants.serializers import RestaurantSerializer
+from apps.slots.services import ensure_default_slots
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,8 @@ class RestaurantViewSet(viewsets.ModelViewSet):
             self.permission_denied(request)
         restaurant.status = Restaurant.Status.APPROVED
         restaurant.save(update_fields=["status", "updated_at"])
-        logger.info("restaurant_approved", extra={"restaurant_id": str(restaurant.id), "actor_id": str(request.user.id)})
+        created_slots = ensure_default_slots(restaurant, actor=request.user)
+        logger.info("restaurant_approved", extra={"restaurant_id": str(restaurant.id), "actor_id": str(request.user.id), "default_slots_created": len(created_slots)})
         return response.Response(self.get_serializer(restaurant).data)
 
     @decorators.action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])

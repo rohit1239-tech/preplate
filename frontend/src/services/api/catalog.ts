@@ -1,10 +1,6 @@
 import { resolveMediaUrl } from "@/lib/media";
 import { apiClient } from "./client";
-import type { DeliveryLocation, DeliverySlot, MenuCategory, MenuItem, PaginatedResponse } from "@/types";
-
-function withDeliveryLocationImage(location: DeliveryLocation): DeliveryLocation {
-  return { ...location, image: resolveMediaUrl(location.image) };
-}
+import type { DeliveryLocation, DeliverySlot, LocationRequest, MenuCategory, MenuItem, PaginatedResponse, RestaurantDeliveryLocation } from "@/types";
 
 function withMenuItemImage(item: MenuItem): MenuItem {
   return { ...item, image: resolveMediaUrl(item.image) };
@@ -12,17 +8,52 @@ function withMenuItemImage(item: MenuItem): MenuItem {
 
 export async function listDeliveryLocations(params?: Record<string, unknown>) {
   const { data } = await apiClient.get<PaginatedResponse<DeliveryLocation>>("/delivery-locations/", { params });
-  return { ...data, results: data.results.map(withDeliveryLocationImage) };
+  return data;
 }
 
-export async function createDeliveryLocation(payload: Partial<DeliveryLocation> | FormData) {
+export async function createDeliveryLocation(payload: Partial<DeliveryLocation>) {
   const { data } = await apiClient.post<DeliveryLocation>("/delivery-locations/", payload);
-  return withDeliveryLocationImage(data);
+  return data;
 }
 
-export async function updateDeliveryLocation(id: string, payload: Partial<DeliveryLocation> | FormData) {
+export async function updateDeliveryLocation(id: string, payload: Partial<DeliveryLocation>) {
   const { data } = await apiClient.patch<DeliveryLocation>(`/delivery-locations/${id}/`, payload);
-  return withDeliveryLocationImage(data);
+  return data;
+}
+
+export async function listRestaurantDeliveryLocations(params?: Record<string, unknown>) {
+  const { data } = await apiClient.get<PaginatedResponse<RestaurantDeliveryLocation>>("/restaurant-delivery-locations/", { params });
+  return data;
+}
+
+export async function createRestaurantDeliveryLocation(payload: Partial<RestaurantDeliveryLocation>) {
+  const { data } = await apiClient.post<RestaurantDeliveryLocation>("/restaurant-delivery-locations/", payload);
+  return data;
+}
+
+export async function updateRestaurantDeliveryLocation(id: string, payload: Partial<RestaurantDeliveryLocation>) {
+  const { data } = await apiClient.patch<RestaurantDeliveryLocation>(`/restaurant-delivery-locations/${id}/`, payload);
+  return data;
+}
+
+export async function listLocationRequests(params?: Record<string, unknown>) {
+  const { data } = await apiClient.get<PaginatedResponse<LocationRequest>>("/location-requests/", { params });
+  return data;
+}
+
+export async function createLocationRequest(payload: Partial<LocationRequest>) {
+  const { data } = await apiClient.post<LocationRequest>("/location-requests/", payload);
+  return data;
+}
+
+export async function approveLocationRequest(id: string) {
+  const { data } = await apiClient.post<LocationRequest>(`/location-requests/${id}/approve/`);
+  return data;
+}
+
+export async function rejectLocationRequest(id: string) {
+  const { data } = await apiClient.post<LocationRequest>(`/location-requests/${id}/reject/`);
+  return data;
 }
 
 export async function listSlots(params?: Record<string, unknown>) {

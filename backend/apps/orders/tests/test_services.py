@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.accounts.models import User
-from apps.delivery_locations.models import DeliveryLocation
+from apps.delivery_locations.models import DeliveryLocation, RestaurantDeliveryLocation
 from apps.menus.models import MenuCategory, MenuItem
 from apps.orders.models import Order
 from apps.orders.services import OrderStateMachine
@@ -25,7 +25,8 @@ class OrderStateMachineTests(TestCase):
             phone="9100000003",
             status=Restaurant.Status.APPROVED,
         )
-        self.location = DeliveryLocation.objects.create(restaurant=self.restaurant, name="Gate", address="Main gate")
+        self.location = DeliveryLocation.objects.create(name="Gate", address="Main gate")
+        RestaurantDeliveryLocation.objects.create(restaurant=self.restaurant, delivery_location=self.location, capacity_per_slot=50)
         self.slot = DeliverySlot.objects.create(
             restaurant=self.restaurant,
             name="Lunch",

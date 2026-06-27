@@ -1,143 +1,132 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImagePlus } from "lucide-react";
+import { LocateFixed, MapPin } from "lucide-react";
 
 import { RoleHeader } from "@/components/layout/role-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOwnedRestaurant } from "@/features/restaurant-admin/use-owned-restaurant";
 import { isRestaurantOperational, RestaurantOnboardingStatus } from "@/features/restaurant-admin/restaurant-status-gate";
-import { createDeliveryLocation, listDeliveryLocations, updateDeliveryLocation } from "@/services/api";
+import { createLocationRequest, createRestaurantDeliveryLocation, listDeliveryLocations, listRestaurantDeliveryLocations, updateRestaurantDeliveryLocation } from "@/services/api";
 import { queryKeys } from "@/services/query-keys";
-import type { DeliveryLocation } from "@/types";
+import type { DeliveryLocation, RestaurantDeliveryLocation } from "@/types";
 
-function useObjectUrl(file: File | null) {
-  const url = useMemo(() => (file ? URL.createObjectURL(file) : ""), [file]);
-
-  useEffect(() => {
-    if (!url) return;
-    return () => URL.revokeObjectURL(url);
-  }, [url]);
-
-  return url;
-}
+type RequestForm = { name: string; address: string; note: string; latitude: string | null; longitude: string | null };
 
 export default function RestaurantLocationsPage() {
   const { restaurant, isRestaurantAdmin, isLoading: isRestaurantLoading } = useOwnedRestaurant();
   const queryClient = useQueryClient();
-  const [createImage, setCreateImage] = useState<File | null>(null);
-  const createFileRef = useRef<HTMLInputElement | null>(null);
-  const locations = useQuery({
-    queryKey: queryKeys.locations({ restaurant: restaurant?.id, admin: true }),
-    queryFn: () => listDeliveryLocations({ restaurant: restaurant!.id, page_size: 50 }),
+  const [bulkCapacity, setBulkCapacity] = useState("50");
+  const [requestForm, setRequestForm] = useState<RequestForm>({ name: "", address: "", note: "", latitude: null, longitude: null });
+  const [geoStatus, setGeoStatus] = useState("");
+  const locations = useQuery({ queryKey: queryKeys.locations({ catalog: true }), queryFn: () => listDeliveryLocations({ page_size: 100 }), enabled: isRestaurantOperational(restaurant) });
+  const services = useQuery({
+    queryKey: ["restaurant-delivery-locations", { restaurant: restaurant?.id, admin: true }],
+    queryFn: () => listRestaurantDeliveryLocations({ restaurant: restaurant!.id, page_size: 100 }),
     enabled: isRestaurantOperational(restaurant),
   });
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ["locations"] });
-  const create = useMutation({ mutationFn: (payload: FormData) => createDeliveryLocation(payload), onSuccess: refresh });
-  const update = useMutation({ mutationFn: ({ id, payload }: { id: string; payload: FormData | Record<string, unknown> }) => updateDeliveryLocation(id, payload), onSuccess: refresh });
-  const createPreviewUrl = useObjectUrl(createImage);
+  const serviceMap = useMemo(() => new Map((services.data?.results ?? []).map((service) => [service.delivery_location, service])), [services.data?.results]);
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["restaurant-delivery-locations"] });
+  const createService = useMutation({ mutationFn: (payload: Partial<RestaurantDeliveryLocation>) => createRestaurantDeliveryLocation(payload), onSuccess: refresh });
+  const updateService = useMutation({ mutationFn: ({ id, payload }: { id: string; payload: Partial<RestaurantDeliveryLocation> }) => updateRestaurantDeliveryLocation(id, payload), onSuccess: refresh });
+  const requestLocation = useMutation({
+    mutationFn: () => createLocationRequest({ ...requestForm, restaurant: restaurant!.id }),
+    onSuccess: () => {
+      setRequestForm({ name: "", address: "", note: "", latitude: null, longitude: null });
+      setGeoStatus("Request submitted for platform review.");
+    },
+  });
 
   if (!isRestaurantAdmin) return <Gate />;
   if (isRestaurantLoading) return <main className="min-h-screen bg-background p-6">Loading...</main>;
   if (!restaurant || !isRestaurantOperational(restaurant)) return <RestaurantOnboardingStatus restaurant={restaurant} />;
 
+  function saveService(location: DeliveryLocation, service: RestaurantDeliveryLocation | undefined, payload: Partial<RestaurantDeliveryLocation>) {
+    if (service) {
+      updateService.mutate({ id: service.id, payload });
+      return;
+    }
+    createService.mutate({ restaurant: restaurant!.id, delivery_location: location.id, capacity_per_slot: Number(bulkCapacity) || 50, is_active: true, ...payload });
+  }
+
+  function applyBulkCapacity() {
+    const capacity = Number(bulkCapacity);
+    if (!capacity) return;
+    (services.data?.results ?? []).forEach((service) => updateService.mutate({ id: service.id, payload: { capacity_per_slot: capacity } }));
+  }
+
+  function useGps() {
+    if (!navigator.geolocation) {
+      setGeoStatus("GPS is not available in this browser.");
+      return;
+    }
+    setGeoStatus("Getting current location...");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setRequestForm((current) => ({ ...current, latitude: position.coords.latitude.toFixed(6), longitude: position.coords.longitude.toFixed(6) }));
+        setGeoStatus("GPS attached to request.");
+      },
+      () => setGeoStatus("GPS permission was not granted. You can still submit manually."),
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  }
+
   return (
     <main className="min-h-screen bg-background px-4 py-6">
       <div className="mx-auto max-w-5xl">
-        <RoleHeader title="Delivery locations" description="Manage pickup points, photos, and per-slot capacity." />
-        <section className="rounded-xl border border-border bg-surface p-5">
-          <h2 className="text-xl font-semibold">Add delivery location</h2>
-          <form
-            className="mt-4 grid gap-3 md:grid-cols-[1fr_180px]"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const form = new FormData(event.currentTarget);
-              form.set("restaurant", restaurant.id);
-              form.set("is_active", "true");
-              if (!createImage) form.delete("image");
-              create.mutate(form, {
-                onSuccess: () => {
-                  event.currentTarget.reset();
-                  setCreateImage(null);
-                },
-              });
-            }}
-          >
-            <div className="grid gap-3 md:grid-cols-2">
-              <Input name="name" placeholder="Hostel A" required />
-              <Input name="capacity_per_slot" placeholder="Capacity" inputMode="numeric" defaultValue={50} required />
-              <Input name="address" placeholder="Pickup address" className="md:col-span-2" required />
+        <RoleHeader title="Served pickup points" description="Choose platform-approved pickup points and set restaurant capacity per slot." />
+
+        <section className="rounded-lg border border-border bg-surface p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">Location catalog</h2>
+              <p className="mt-1 text-sm text-text-secondary">Turn on the pickup points this restaurant can serve.</p>
             </div>
-            <div className="overflow-hidden rounded-md border border-border bg-surface-subtle">
-              {createPreviewUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- Local object URLs are dynamic.
-                <img src={createPreviewUrl} alt="Selected location preview" className="h-32 w-full object-cover" />
-              ) : (
-                <div className="grid h-32 place-items-center text-sm text-text-muted">No photo selected</div>
-              )}
-              <button type="button" className="flex w-full items-center justify-center gap-2 border-t border-border px-3 py-2 text-sm font-medium" onClick={() => createFileRef.current?.click()}>
-                <ImagePlus className="size-4" /> {createImage ? "Replace photo" : "Upload photo"}
-              </button>
-              <input ref={createFileRef} name="image" type="file" accept="image/*" className="sr-only" onChange={(event) => setCreateImage(event.target.files?.[0] ?? null)} />
+            <div className="flex gap-2">
+              <Input value={bulkCapacity} onChange={(event) => setBulkCapacity(event.target.value.replace(/\D/g, ""))} className="w-28" inputMode="numeric" />
+              <Button type="button" variant="secondary" onClick={applyBulkCapacity}>Apply capacity</Button>
             </div>
-            <Button type="submit" className="md:col-span-2" isLoading={create.isPending}>Create location</Button>
-          </form>
-          {create.error ? <p className="mt-3 text-sm text-error">{create.error.message}</p> : null}
+          </div>
+
+          <div className="mt-5 grid gap-3">
+            {locations.data?.results.map((location) => {
+              const service = serviceMap.get(location.id);
+              return (
+                <div key={location.id} className="grid gap-3 rounded-md border border-border bg-background p-4 md:grid-cols-[1fr_130px_auto] md:items-center">
+                  <div className="flex min-w-0 gap-3">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-md bg-surface-subtle text-text-secondary"><MapPin className="size-5" /></span>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-text-primary">{location.name}</p>
+                      <p className="mt-1 text-sm text-text-secondary">{location.address}</p>
+                    </div>
+                  </div>
+                  <Input value={service?.capacity_per_slot ?? bulkCapacity} inputMode="numeric" onChange={(event) => { if (service) saveService(location, service, { capacity_per_slot: Number(event.target.value) || 1 }); }} />
+                  <Button type="button" variant={service?.is_active ? "outline" : "secondary"} onClick={() => saveService(location, service, { is_active: !(service?.is_active ?? false) })}>
+                    {service?.is_active ? "Serving" : "Serve"}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
         </section>
 
-        <section className="mt-5 grid gap-3">
-          {locations.data?.results.map((location) => (
-            <LocationForm key={location.id} location={location} isUpdating={update.isPending} onUpdate={(payload) => update.mutate({ id: location.id, payload })} />
-          ))}
+        <section className="mt-5 rounded-lg border border-border bg-surface p-5">
+          <h2 className="text-xl font-semibold">Request new pickup point</h2>
+          <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); requestLocation.mutate(); }}>
+            <Input value={requestForm.name} onChange={(event) => setRequestForm((current) => ({ ...current, name: event.target.value }))} placeholder="Location name" required />
+            <Input value={requestForm.address} onChange={(event) => setRequestForm((current) => ({ ...current, address: event.target.value }))} placeholder="Address or landmark" required />
+            <Input value={requestForm.note} onChange={(event) => setRequestForm((current) => ({ ...current, note: event.target.value }))} placeholder="Optional note" className="md:col-span-2" />
+            <Button type="button" variant="outline" onClick={useGps}><LocateFixed className="size-4" /> Use current GPS</Button>
+            <Button type="submit" isLoading={requestLocation.isPending}>Submit request</Button>
+          </form>
+          {geoStatus ? <p className="mt-3 text-xs text-text-muted">{geoStatus}</p> : null}
+          {requestLocation.error ? <p className="mt-3 text-sm text-error">{requestLocation.error.message}</p> : null}
         </section>
       </div>
     </main>
-  );
-}
-
-function LocationForm({ location, isUpdating, onUpdate }: { location: DeliveryLocation; isUpdating: boolean; onUpdate: (payload: FormData | Record<string, unknown>) => void }) {
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const previewUrl = useObjectUrl(selectedImage);
-  const displayImage = previewUrl || location.image;
-
-  return (
-    <form
-      className="grid gap-4 rounded-xl border border-border bg-surface p-4 md:grid-cols-[180px_1fr]"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget);
-        if (!selectedImage) form.delete("image");
-        onUpdate(form);
-        setSelectedImage(null);
-      }}
-    >
-      <div className="overflow-hidden rounded-md border border-border bg-surface-subtle">
-        {displayImage ? (
-          // eslint-disable-next-line @next/next/no-img-element -- Backend media URLs and local object URLs are dynamic.
-          <img src={displayImage} alt={location.name} className="h-36 w-full object-cover" />
-        ) : (
-          <div className="grid h-36 place-items-center text-sm text-text-muted">No photo</div>
-        )}
-        <button type="button" className="flex w-full items-center justify-center gap-2 border-t border-border px-3 py-2 text-sm font-medium" onClick={() => fileInputRef.current?.click()}>
-          <ImagePlus className="size-4" /> {selectedImage ? "Replace selected" : "Replace photo"}
-        </button>
-        <input ref={fileInputRef} name="image" type="file" accept="image/*" className="sr-only" onChange={(event) => setSelectedImage(event.target.files?.[0] ?? null)} />
-      </div>
-      <div className="grid gap-3">
-        <div className="grid gap-3 md:grid-cols-[1fr_120px_auto_auto]">
-          <Input name="name" defaultValue={location.name} required />
-          <Input name="capacity_per_slot" defaultValue={location.capacity_per_slot} inputMode="numeric" required />
-          <Button type="submit" variant="secondary" isLoading={isUpdating}>Save</Button>
-          <Button type="button" variant={location.is_active ? "outline" : "secondary"} onClick={() => onUpdate({ is_active: !location.is_active })}>{location.is_active ? "Active" : "Inactive"}</Button>
-        </div>
-        <Input name="address" defaultValue={location.address} required />
-        <p className="text-xs text-text-muted">{selectedImage?.name ?? (location.image ? "Current photo" : "No photo uploaded")}</p>
-      </div>
-    </form>
   );
 }
 

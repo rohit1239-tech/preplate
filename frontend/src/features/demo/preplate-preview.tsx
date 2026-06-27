@@ -21,6 +21,7 @@ import { formatMoney } from "@/lib/utils";
 import {
   listDeliveryLocations,
   listMenuItems,
+  listRestaurantDeliveryLocations,
   listRestaurants,
   listSlots,
 } from "@/services/api";
@@ -37,6 +38,10 @@ export function PreplatePreview() {
     queryKey: queryKeys.restaurants({ preview: true }),
     queryFn: () => listRestaurants({ page_size: 20 }),
   });
+  const serviceLocationsQuery = useQuery({
+    queryKey: ["restaurant-delivery-locations", { preview: true }],
+    queryFn: () => listRestaurantDeliveryLocations({ page_size: 100 }),
+  });
   const slotsQuery = useQuery({
     queryKey: queryKeys.slots({ preview: true }),
     queryFn: () => listSlots({ page_size: 20 }),
@@ -48,23 +53,26 @@ export function PreplatePreview() {
 
   const locations = locationsQuery.data?.results ?? [];
   const restaurants = restaurantsQuery.data?.results ?? [];
+  const serviceLocations = serviceLocationsQuery.data?.results ?? [];
   const slots = slotsQuery.data?.results ?? [];
   const menuItems = menuQuery.data?.results ?? [];
   const selectedLocation =
     locations.find((location) => location.id === selectedLocationId) ?? locations[0];
 
   const restaurantsForLocation = selectedLocation
-    ? restaurants.filter((restaurant) => restaurant.id === selectedLocation.restaurant)
+    ? restaurants.filter((restaurant) => serviceLocations.some((service) => service.delivery_location === selectedLocation.id && service.restaurant === restaurant.id && service.is_active))
     : restaurants;
 
   const isLoading =
     locationsQuery.isLoading ||
     restaurantsQuery.isLoading ||
+    serviceLocationsQuery.isLoading ||
     slotsQuery.isLoading ||
     menuQuery.isLoading;
   const hasBackendError =
     locationsQuery.isError ||
     restaurantsQuery.isError ||
+    serviceLocationsQuery.isError ||
     slotsQuery.isError ||
     menuQuery.isError;
 
@@ -124,9 +132,7 @@ export function PreplatePreview() {
                         >
                           <span>
                             <span className="block text-sm font-semibold text-text-primary">{location.name}</span>
-                            <span className="block text-xs text-text-secondary">
-                              Capacity {location.capacity_per_slot} orders per slot
-                            </span>
+                            <span className="block text-xs text-text-secondary">{location.address}</span>
                           </span>
                           <ArrowRight className="size-4 text-text-muted" />
                         </button>

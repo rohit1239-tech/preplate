@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.delivery_locations.models import DeliveryLocation
+from apps.delivery_locations.models import DeliveryLocation, RestaurantDeliveryLocation
 from apps.menus.models import MenuCategory, MenuItem
 from apps.orders.models import Order, OrderItem, OrderStatusHistory
 from apps.payments.models import Payment
@@ -115,14 +115,20 @@ class Command(BaseCommand):
 
     def _location(self, restaurant, name, address, capacity):
         location, _ = DeliveryLocation.objects.get_or_create(
-            restaurant=restaurant,
             name=name,
-            defaults={"address": address, "capacity_per_slot": capacity, "is_active": True},
+            address=address,
+            defaults={"is_active": True},
         )
-        location.address = address
-        location.capacity_per_slot = capacity
         location.is_active = True
-        location.save()
+        location.save(update_fields=["is_active", "updated_at"])
+        service, _ = RestaurantDeliveryLocation.objects.get_or_create(
+            restaurant=restaurant,
+            delivery_location=location,
+            defaults={"capacity_per_slot": capacity, "is_active": True},
+        )
+        service.capacity_per_slot = capacity
+        service.is_active = True
+        service.save(update_fields=["capacity_per_slot", "is_active", "updated_at"])
         return location
 
     def _slot(self, restaurant, name, cutoff, start, end):

@@ -3,17 +3,17 @@
 import Link from "next/link";
 import { useMemo, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Clock3, LogIn, Store, UsersRound, XCircle } from "lucide-react";
+import { CheckCircle2, Clock3, LogIn, MapPin, Store, UsersRound, XCircle } from "lucide-react";
 
 import { OrderStatusBadge } from "@/components/data-display/status-badge";
 import { RoleHeader } from "@/components/layout/role-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { approveRestaurant, getPlatformAnalytics, listOrders, listRestaurants, rejectRestaurant } from "@/services/api";
+import { approveLocationRequest, approveRestaurant, getPlatformAnalytics, listLocationRequests, listOrders, listRestaurants, rejectLocationRequest, rejectRestaurant } from "@/services/api";
 import { queryKeys } from "@/services/query-keys";
 import { useAuthStore } from "@/store";
-import type { Order, Restaurant } from "@/types";
+import type { LocationRequest, Order, Restaurant } from "@/types";
 import { formatMoney } from "@/lib/utils";
 
 type PlatformAnalytics = {
@@ -56,13 +56,24 @@ export default function AdminDashboard() {
     enabled: user?.role === "PLATFORM_ADMIN",
   });
 
+  const locationRequests = useQuery({
+    queryKey: ["location-requests", { status: "PENDING" }],
+    queryFn: () => listLocationRequests({ status: "PENDING", page_size: 50 }),
+    enabled: user?.role === "PLATFORM_ADMIN",
+  });
+
   const refreshAdminData = () => {
     queryClient.invalidateQueries({ queryKey: ["restaurants"] });
     queryClient.invalidateQueries({ queryKey: ["analytics", "platform"] });
+    queryClient.invalidateQueries({ queryKey: ["location-requests"] });
+    queryClient.invalidateQueries({ queryKey: ["locations"] });
+    queryClient.invalidateQueries({ queryKey: ["restaurant-delivery-locations"] });
   };
 
   const approve = useMutation({ mutationFn: approveRestaurant, onSuccess: refreshAdminData });
   const reject = useMutation({ mutationFn: rejectRestaurant, onSuccess: refreshAdminData });
+  const approveLocation = useMutation({ mutationFn: approveLocationRequest, onSuccess: refreshAdminData });
+  const rejectLocation = useMutation({ mutationFn: rejectLocationRequest, onSuccess: refreshAdminData });
 
   const restaurantMap = useMemo(() => {
     return new Map((restaurants.data?.results ?? []).map((restaurant) => [restaurant.id, restaurant.name]));
@@ -70,7 +81,8 @@ export default function AdminDashboard() {
 
   const pendingRestaurants = (restaurants.data?.results ?? []).filter((restaurant) => restaurant.status === "PENDING");
   const recentOrders = orders.data?.results ?? [];
-  const isLoading = restaurants.isLoading || orders.isLoading || analytics.isLoading;
+  const pendingLocationRequests = locationRequests.data?.results ?? [];
+  const isLoading = restaurants.isLoading || orders.isLoading || analytics.isLoading || locationRequests.isLoading;
 
   if (user?.role !== "PLATFORM_ADMIN") {
     return <AdminGate />;
@@ -116,6 +128,35 @@ export default function AdminDashboard() {
                 </div>
               ) : (
                 <EmptyMessage title="No restaurants waiting" description="New restaurant signups will appear here for approval." />
+              )}
+            </CardContent>
+          </Card>
+
+
+          <Card>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle>Location requests</CardTitle>
+                <p className="text-sm text-text-secondary">Review pickup points requested by customers and restaurants.</p>
+              </div>
+              <Badge variant="warning">{pendingLocationRequests.length} pending</Badge>
+            </CardHeader>
+            <CardContent>
+              {pendingLocationRequests.length ? (
+                <div className="space-y-3">
+                  {pendingLocationRequests.map((locationRequest) => (
+                    <LocationRequestRow
+                      key={locationRequest.id}
+                      locationRequest={locationRequest}
+                      isApproving={approveLocation.isPending}
+                      isRejecting={rejectLocation.isPending}
+                      onApprove={() => approveLocation.mutate(locationRequest.id)}
+                      onReject={() => rejectLocation.mutate(locationRequest.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyMessage title="No location requests" description="Customer and restaurant pickup requests will appear here." />
               )}
             </CardContent>
           </Card>
@@ -202,6 +243,31 @@ function Kpi({ label, value, icon, tone = "neutral" }: { label: string; value: s
         <div className={`grid size-11 place-items-center rounded-md ${toneClass}`}>{icon}</div>
       </CardContent>
     </Card>
+  );
+}
+
+function LocationRequestRow({ locationRequest, isApproving, isRejecting, onApprove, onReject }: { locationRequest: LocationRequest; isApproving: boolean; isRejecting: boolean; onApprove: () => void; onReject: () => void }) {
+  const duplicate = locationRequest.matched_location_name || locationRequest.matched_request_name;
+
+  return (
+    <div className="rounded-md border border-border bg-background p-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <MapPin className="size-4 text-text-muted" />
+            <p className="font-semibold text-text-primary">{locationRequest.name}</p>
+            {locationRequest.restaurant_name ? <Badge variant="neutral">{locationRequest.restaurant_name}</Badge> : null}
+          </div>
+          <p className="mt-1 text-sm text-text-secondary">{locationRequest.address}</p>
+          {locationRequest.note ? <p className="mt-2 text-xs text-text-muted">{locationRequest.note}</p> : null}
+          {duplicate ? <p className="mt-2 text-xs text-warning">Possible duplicate: {duplicate}</p> : null}
+        </div>
+        <div className="flex flex-wrap gap-2 lg:justify-end">
+          <Button size="sm" isLoading={isApproving} onClick={onApprove}><CheckCircle2 className="size-4" /> Approve</Button>
+          <Button size="sm" variant="destructive" isLoading={isRejecting} onClick={onReject}><XCircle className="size-4" /> Reject</Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

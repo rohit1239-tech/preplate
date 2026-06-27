@@ -8,7 +8,7 @@ from rest_framework.exceptions import ValidationError
 from apps.accounts.models import User
 from apps.cart.models import Cart
 from apps.cart.services import CartService
-from apps.delivery_locations.models import DeliveryLocation
+from apps.delivery_locations.models import DeliveryLocation, RestaurantDeliveryLocation
 from apps.menus.models import MenuCategory, MenuItem
 from apps.orders.models import Order
 from apps.payments.models import Payment
@@ -27,9 +27,12 @@ class CartServiceTests(TestCase):
             status=Restaurant.Status.APPROVED,
         )
         self.location = DeliveryLocation.objects.create(
-            restaurant=self.restaurant,
             name="Gate",
             address="Main gate",
+        )
+        RestaurantDeliveryLocation.objects.create(
+            restaurant=self.restaurant,
+            delivery_location=self.location,
             capacity_per_slot=1,
         )
         self.slot = DeliverySlot.objects.create(
@@ -122,6 +125,18 @@ class CartServiceTests(TestCase):
                 timezone.localdate() + timedelta(days=1),
             )
 
+    def test_initialize_cart_rejects_unserved_location(self):
+        unserved_location = DeliveryLocation.objects.create(name="Remote Gate", address="Far side")
+
+        with self.assertRaises(ValidationError):
+            CartService.initialize_cart(
+                self.customer,
+                self.restaurant,
+                unserved_location,
+                self.slot,
+                timezone.localdate() + timedelta(days=1),
+            )
+
     def test_past_delivery_date_is_rejected(self):
         cart = Cart.objects.create(
             customer=self.customer,
@@ -151,9 +166,12 @@ class CartServiceTests(TestCase):
 
         second_customer = User.objects.create_user(email="user9000000005@preplate.local", phone="9000000005", role=User.Role.CUSTOMER)
         second_location = DeliveryLocation.objects.create(
-            restaurant=self.restaurant,
             name="Gate B",
             address="Second gate",
+        )
+        RestaurantDeliveryLocation.objects.create(
+            restaurant=self.restaurant,
+            delivery_location=second_location,
             capacity_per_slot=10,
         )
         second_cart = CartService.initialize_cart(

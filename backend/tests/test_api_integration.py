@@ -60,33 +60,36 @@ class FullOrderFlowAPITests(TestCase):
         approve = self.client.post(f"/api/v1/restaurants/{restaurant_id}/approve/")
         self.assertEqual(approve.status_code, status.HTTP_200_OK)
 
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {owner_token}")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {admin_token}")
         location = self.client.post(
             "/api/v1/delivery-locations/",
             {
-                "restaurant": restaurant_id,
                 "name": "Gate A",
                 "address": "Main",
-                "capacity_per_slot": 5,
+                "is_active": True,
             },
             format="json",
         )
-        self.assertEqual(location.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(location.status_code, status.HTTP_201_CREATED, location.json())
         loc_id = location.json()["id"]
 
-        slot = self.client.post(
-            "/api/v1/slots/",
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {owner_token}")
+        service_location = self.client.post(
+            "/api/v1/restaurant-delivery-locations/",
             {
                 "restaurant": restaurant_id,
-                "name": "Lunch",
-                "cutoff_time": "10:30:00",
-                "delivery_start_time": "12:00:00",
-                "delivery_end_time": "13:00:00",
+                "delivery_location": loc_id,
+                "capacity_per_slot": 5,
+                "is_active": True,
             },
             format="json",
         )
-        self.assertEqual(slot.status_code, status.HTTP_201_CREATED)
-        slot_id = slot.json()["id"]
+        self.assertEqual(service_location.status_code, status.HTTP_201_CREATED, service_location.json())
+
+        slots = self.client.get("/api/v1/slots/", {"restaurant": restaurant_id})
+        self.assertEqual(slots.status_code, status.HTTP_200_OK, slots.json())
+        lunch = next(slot for slot in slots.json()["results"] if slot["name"] == "Lunch")
+        slot_id = lunch["id"]
 
         category = self.client.post(
             "/api/v1/menu-categories/",
