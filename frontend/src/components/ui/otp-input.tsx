@@ -10,9 +10,10 @@ interface OtpInputProps {
   length?: number;
   disabled?: boolean;
   className?: string;
+  ariaLabelPrefix?: string;
 }
 
-export function OtpInput({ value, onChange, length = 6, disabled, className }: OtpInputProps) {
+export function OtpInput({ value, onChange, length = 6, disabled, className, ariaLabelPrefix = "OTP digit" }: OtpInputProps) {
   const refs = useRef<Array<HTMLInputElement | null>>([]);
   const digits = Array.from({ length }, (_, index) => value[index] ?? "");
 
@@ -45,7 +46,7 @@ export function OtpInput({ value, onChange, length = 6, disabled, className }: O
           inputMode="numeric"
           autoComplete={index === 0 ? "one-time-code" : "off"}
           maxLength={1}
-          aria-label={`OTP digit ${index + 1}`}
+          aria-label={`${ariaLabelPrefix} ${index + 1}`}
           className="size-12 rounded-md border border-border bg-surface text-center text-xl font-semibold text-text-primary shadow-[var(--shadow-sm)] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60 sm:size-14"
           onChange={(event) => setDigit(index, event.target.value)}
           onFocus={(event) => event.target.select()}

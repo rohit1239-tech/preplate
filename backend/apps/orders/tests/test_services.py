@@ -8,6 +8,8 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from apps.accounts.models import User
 from apps.delivery_locations.models import DeliveryLocation, RestaurantDeliveryLocation
 from apps.menus.models import MenuCategory, MenuItem
+from apps.notifications.models import Notification
+from apps.notifications.tasks import order_status_notification_task
 from apps.orders.models import Order
 from apps.orders.services import OrderStateMachine
 from apps.payments.models import Payment
@@ -17,16 +19,30 @@ from apps.slots.models import DeliverySlot
 
 class OrderStateMachineTests(TestCase):
     def setUp(self):
-        self.customer = User.objects.create_user(email="user9100000001@preplate.local", phone="9100000001", role=User.Role.CUSTOMER)
-        self.owner = User.objects.create_user(email="user9100000002@preplate.local", phone="9100000002", role=User.Role.RESTAURANT_ADMIN)
+        self.customer = User.objects.create_user(
+            email="user9100000001@preplate.local",
+            phone="9100000001",
+            role=User.Role.CUSTOMER,
+        )
+        self.owner = User.objects.create_user(
+            email="user9100000002@preplate.local",
+            phone="9100000002",
+            role=User.Role.RESTAURANT_ADMIN,
+        )
         self.restaurant = Restaurant.objects.create(
             owner=self.owner,
             name="Kitchen",
             phone="9100000003",
             status=Restaurant.Status.APPROVED,
         )
-        self.location = DeliveryLocation.objects.create(name="Gate", address="Main gate")
-        RestaurantDeliveryLocation.objects.create(restaurant=self.restaurant, delivery_location=self.location, capacity_per_slot=50)
+        self.location = DeliveryLocation.objects.create(
+            name="Gate", address="Main gate"
+        )
+        RestaurantDeliveryLocation.objects.create(
+            restaurant=self.restaurant,
+            delivery_location=self.location,
+            capacity_per_slot=50,
+        )
         self.slot = DeliverySlot.objects.create(
             restaurant=self.restaurant,
             name="Lunch",
@@ -52,20 +68,48 @@ class OrderStateMachineTests(TestCase):
             subtotal=Decimal("100.00"),
             total=Decimal("100.00"),
         )
-        Payment.objects.create(order=self.order, method=Payment.Method.COD, amount=self.order.total)
+        Payment.objects.create(
+            order=self.order, method=Payment.Method.COD, amount=self.order.total
+        )
 
     def test_valid_status_transition(self):
-        order = OrderStateMachine.transition(self.order, Order.Status.CONFIRMED, self.owner)
+        order = OrderStateMachine.transition(
+            self.order, Order.Status.CONFIRMED, self.owner
+        )
         self.assertEqual(order.status, Order.Status.CONFIRMED)
         self.assertEqual(order.history.first().to_status, Order.Status.CONFIRMED)
 
     def test_invalid_status_transition_is_rejected(self):
         with self.assertRaises(ValidationError):
-            OrderStateMachine.transition(self.order, Order.Status.OUT_FOR_DELIVERY, self.owner)
+            OrderStateMachine.transition(
+                self.order, Order.Status.OUT_FOR_DELIVERY, self.owner
+            )
+
+    def test_cancel_requires_reason(self):
+        with self.assertRaises(ValidationError):
+            OrderStateMachine.transition(self.order, Order.Status.CANCELLED, self.owner)
+
+    def test_cancel_stores_reason_and_notifies_customer(self):
+        order = OrderStateMachine.transition(
+            self.order,
+            Order.Status.CANCELLED,
+            self.owner,
+            "Kitchen ran out of stock",
+        )
+
+        self.assertEqual(order.status, Order.Status.CANCELLED)
+        self.assertEqual(order.history.first().note, "Kitchen ran out of stock")
+
+        order_status_notification_task(str(order.id))
+
+        notification = Notification.objects.get(user=self.customer)
+        self.assertIn("Kitchen ran out of stock", notification.message)
 
     def test_customer_cannot_update_status(self):
         with self.assertRaises(PermissionDenied):
-            OrderStateMachine.transition(self.order, Order.Status.CONFIRMED, self.customer)
+            OrderStateMachine.transition(
+                self.order, Order.Status.CONFIRMED, self.customer
+            )
 
     def test_pin_verification_delivers_and_marks_cod_paid(self):
         self.order.status = Order.Status.REACHED

@@ -5,7 +5,7 @@ import { formatMoney } from "@/lib/utils";
 import { useLocalCartStore } from "@/store";
 import type { MenuItem, Restaurant } from "@/types";
 
-export function MenuItemCard({ item, restaurant }: { item: MenuItem; restaurant: Restaurant }) {
+export function MenuItemCard({ item, restaurant, disabled = false, disabledReason = "Choose a pickup point first." }: { item: MenuItem; restaurant: Restaurant; disabled?: boolean; disabledReason?: string }) {
   const { items, addItem, decrementItem } = useLocalCartStore();
   const quantity = items.find((cartItem) => cartItem.menuItem.id === item.id)?.quantity ?? 0;
 
@@ -29,10 +29,10 @@ export function MenuItemCard({ item, restaurant }: { item: MenuItem; restaurant:
           <div className="grid h-9 grid-cols-3 overflow-hidden rounded-md border border-primary bg-primary text-surface">
             <button type="button" onClick={() => decrementItem(item.id)} className="grid place-items-center"><Minus className="size-4" /></button>
             <div className="grid place-items-center text-sm font-semibold">{quantity}</div>
-            <button type="button" onClick={() => addItem(restaurant, item)} className="grid place-items-center"><Plus className="size-4" /></button>
+            <button type="button" disabled={disabled} title={disabled ? disabledReason : undefined} onClick={() => addItem(restaurant, item)} className="grid place-items-center disabled:cursor-not-allowed disabled:opacity-50"><Plus className="size-4" /></button>
           </div>
         ) : (
-          <Button className="h-9 w-full" size="sm" onClick={() => addItem(restaurant, item)}>Add</Button>
+          <Button className="h-9 w-full" size="sm" disabled={disabled} title={disabled ? disabledReason : undefined} onClick={() => addItem(restaurant, item)}>Add</Button>
         )}
       </div>
     </div>

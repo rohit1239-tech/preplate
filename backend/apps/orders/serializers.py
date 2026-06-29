@@ -47,6 +47,17 @@ class OrderStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=Order.Status.choices)
     note = serializers.CharField(required=False, allow_blank=True)
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if (
+            attrs["status"] == Order.Status.CANCELLED
+            and not attrs.get("note", "").strip()
+        ):
+            raise serializers.ValidationError(
+                {"note": "Cancellation reason is required."}
+            )
+        return attrs
+
 
 class VerifyPINSerializer(serializers.Serializer):
     pin = serializers.CharField(min_length=4, max_length=4)

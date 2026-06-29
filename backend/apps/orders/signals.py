@@ -1,5 +1,6 @@
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -25,4 +26,6 @@ def publish_order_status(sender, instance: Order, created: bool, **kwargs):
                 },
             },
         )
-    order_status_notification_task.delay(str(instance.id))
+    transaction.on_commit(
+        lambda: order_status_notification_task.delay(str(instance.id))
+    )

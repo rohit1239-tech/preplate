@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Clock, ShoppingBag, Star } from "lucide-react";
+import { ArrowLeft, Clock, MapPin, ShoppingBag, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { MenuItemCard } from "@/features/menu/menu-item-card";
-import { listMenuItems, getRestaurant, listSlots } from "@/services/api";
+import { listMenuItems, getRestaurant, listRestaurantDeliveryLocations, listSlots } from "@/services/api";
 import { queryKeys } from "@/services/query-keys";
 import { getCartTotal, useLocalCartStore, useOrderContextStore } from "@/store";
 import { formatMoney } from "@/lib/utils";
@@ -28,18 +28,26 @@ export default function RestaurantMenuPage() {
   const restaurant = useQuery({ queryKey: queryKeys.restaurant(restaurantId), queryFn: () => getRestaurant(restaurantId) });
   const menu = useQuery({ queryKey: queryKeys.menuItems({ restaurant: restaurantId }), queryFn: () => listMenuItems({ restaurant: restaurantId, page_size: 50 }) });
   const slots = useQuery({ queryKey: queryKeys.slots({ restaurant: restaurantId }), queryFn: () => listSlots({ restaurant: restaurantId, page_size: 50 }) });
+  const serviceLocations = useQuery({ queryKey: ["restaurant-delivery-locations", { restaurant: restaurantId, customer: true }], queryFn: () => listRestaurantDeliveryLocations({ restaurant: restaurantId, page_size: 100 }) });
   const { items } = useLocalCartStore();
-  const { slotId, setSlot } = useOrderContextStore();
+  const { deliveryLocationId, slotId, setDeliveryLocation, setSlot } = useOrderContextStore();
   const [now, setNow] = useState(() => new Date());
   const relevantSlots = useMemo(() => sortSlots(slots.data?.results ?? []), [slots.data?.results]);
   const selectedSlot = relevantSlots.find((slot) => slot.id === slotId);
   const deliveryDate = todayIsoDate();
+  const servedLocations = useMemo(() => (serviceLocations.data?.results ?? []).filter((service) => service.is_active), [serviceLocations.data?.results]);
+  const selectedServiceLocation = servedLocations.find((service) => service.delivery_location === deliveryLocationId);
+  const canBuildCart = Boolean(selectedServiceLocation);
   const totalItems = items.reduce((total, item) => total + item.quantity, 0);
   const total = getCartTotal(items);
 
   useEffect(() => {
     if (slotId && !relevantSlots.some((slot) => slot.id === slotId)) setSlot(null);
   }, [relevantSlots, setSlot, slotId]);
+
+  function choosePickup(locationId: string) {
+    setDeliveryLocation(locationId);
+  }
 
   useEffect(() => {
     if (selectedSlot && secondsUntilSlotCutoff(deliveryDate, selectedSlot.cutoff_time, now) <= 0) setSlot(null);
@@ -69,6 +77,24 @@ export default function RestaurantMenuPage() {
       </section>
       <section className="mx-auto max-w-6xl px-4 pt-5">
         <div className="rounded-lg border border-border bg-surface p-4 shadow-[var(--shadow-sm)]">
+          <div className="flex items-center gap-2 text-sm font-medium"><MapPin className="size-4 text-text-muted" /> Pickup point</div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {servedLocations.map((service) => {
+              const active = service.delivery_location === deliveryLocationId;
+              return (
+                <button key={service.id} type="button" onClick={() => choosePickup(service.delivery_location)} className={`rounded-md border px-3 py-3 text-left transition ${active ? "border-primary bg-primary text-white" : "border-border bg-surface hover:border-border-strong"}`}>
+                  <span className="block font-medium">{service.location_name}</span>
+                  <span className={`mt-1 block text-xs ${active ? "text-white/70" : "text-text-muted"}`}>{service.location_address}</span>
+                </button>
+              );
+            })}
+          </div>
+          {!serviceLocations.isLoading && !servedLocations.length ? <p className="mt-3 rounded-md bg-error-surface px-3 py-2 text-sm text-error">This restaurant has not enabled any pickup points yet.</p> : null}
+          {servedLocations.length > 0 && !canBuildCart ? <p className="mt-3 rounded-md bg-warning-surface px-3 py-2 text-sm text-warning">Choose one of this restaurant&apos;s pickup points before adding items.</p> : null}
+        </div>
+      </section>
+      <section className="mx-auto max-w-6xl px-4 pt-5">
+        <div className="rounded-lg border border-border bg-surface p-4 shadow-[var(--shadow-sm)]">
           <p className="text-sm font-medium">Meal window</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {SLOT_NAMES.map((name) => {
@@ -89,9 +115,9 @@ export default function RestaurantMenuPage() {
         </div>
       </section>
       <section className="mx-auto grid max-w-6xl gap-4 px-4 py-6 md:grid-cols-2">
-        {menu.data?.results.map((item) => <MenuItemCard key={item.id} item={item} restaurant={restaurant.data} />)}
+        {menu.data?.results.map((item) => <MenuItemCard key={item.id} item={item} restaurant={restaurant.data} disabled={!canBuildCart} disabledReason="Choose a served pickup point before adding items." />)}
       </section>
-      {totalItems ? <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 p-3 backdrop-blur"><div className="mx-auto flex max-w-3xl items-center justify-between rounded-lg bg-primary p-3 text-white"><div><p className="font-semibold">{totalItems} items · {formatMoney(total)}</p><p className="text-xs text-white/70">{selectedSlot ? `${selectedSlot.name} selected` : "Choose a meal window before checkout"}</p></div>{selectedSlot ? <Button asChild variant="secondary"><Link href="/cart"><ShoppingBag className="size-4" /> View cart</Link></Button> : <Button variant="secondary" disabled><ShoppingBag className="size-4" /> View cart</Button>}</div></div> : null}
+      {totalItems ? <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 p-3 backdrop-blur"><div className="mx-auto flex max-w-3xl items-center justify-between rounded-lg bg-primary p-3 text-white"><div><p className="font-semibold">{totalItems} items · {formatMoney(total)}</p><p className="text-xs text-white/70">{!canBuildCart ? "Choose a pickup point before checkout" : selectedSlot ? `${selectedSlot.name} selected` : "Choose a meal window before checkout"}</p></div>{canBuildCart && selectedSlot ? <Button asChild variant="secondary"><Link href="/cart"><ShoppingBag className="size-4" /> View cart</Link></Button> : <Button variant="secondary" disabled><ShoppingBag className="size-4" /> View cart</Button>}</div></div> : null}
     </main>
   );
 }

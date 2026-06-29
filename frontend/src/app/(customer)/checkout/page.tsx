@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Clock, Lock, Mail } from "lucide-react";
@@ -60,6 +61,11 @@ export default function CheckoutPage() {
   const isCutoffClosed = cutoffSeconds !== null && cutoffSeconds <= 0;
   const isCutoffUrgent = cutoffSeconds !== null && cutoffSeconds > 0 && cutoffSeconds <= 10 * 60;
   const canPlaceOrder = isCustomer && items.length > 0 && Boolean(restaurant && deliveryLocationId && selectedSlot) && !isCutoffClosed;
+  const contextAction = !deliveryLocationId
+    ? { href: "/locations", label: "Choose pickup point", message: "Choose a pickup point served by the restaurant before placing this order." }
+    : !selectedSlot && restaurant
+      ? { href: `/restaurants/${restaurant.id}`, label: "Choose meal window", message: "Choose an active meal window before placing this order." }
+      : null;
 
   const sendOtpMutation = useMutation({
     mutationFn: () => sendOtp({ email: values.email.trim().toLowerCase(), role: "CUSTOMER", intent: mode === "signup" ? "SIGNUP" : "LOGIN" }),
@@ -237,6 +243,14 @@ export default function CheckoutPage() {
             <div className="flex justify-between text-lg font-semibold text-text-primary"><span>Total</span><span>{formatMoney(total)}</span></div>
             <p className="mt-3 text-base text-text-secondary">Cash on Delivery</p>
           </div>
+          {contextAction ? (
+            <div className="mt-5 rounded-md border border-warning/20 bg-warning-surface p-3 text-sm text-warning">
+              <p>{contextAction.message}</p>
+              <Button asChild variant="outline" size="sm" className="mt-3 bg-surface">
+                <Link href={contextAction.href}>{contextAction.label}</Link>
+              </Button>
+            </div>
+          ) : null}
           {selectedSlot ? (
             <div className={cn("mt-5 rounded-md border p-3 text-sm", isCutoffClosed ? "border-error bg-error-surface text-error" : isCutoffUrgent ? "border-warning bg-warning-surface text-warning" : "border-border bg-surface-subtle text-text-secondary")}>
               <Clock className="mr-2 inline size-4" />
