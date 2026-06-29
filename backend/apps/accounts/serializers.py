@@ -39,7 +39,7 @@ class SendOTPSerializer(serializers.Serializer):
         user = User.objects.filter(email=email).first()
 
         if role == User.Role.PLATFORM_ADMIN and (not user or user.role != User.Role.PLATFORM_ADMIN):
-            raise PermissionDenied("Platform admin access is restricted to backend-created admin accounts.")
+            raise PermissionDenied("Permission denied.")
 
         if intent == self.Intent.LOGIN:
             if not user:

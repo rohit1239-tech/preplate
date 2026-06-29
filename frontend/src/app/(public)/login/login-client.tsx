@@ -37,7 +37,7 @@ const flowLabels: Record<UserRole, { label: string; title: string; description: 
   PLATFORM_ADMIN: {
     label: "Platform admin",
     title: "Platform access",
-    description: "Platform admin accounts are created by backend administration only.",
+    description: "",
     icon: ShieldCheck,
   },
 };
@@ -184,7 +184,7 @@ export function LoginClient({ initialRole }: { initialRole: UserRole }) {
 
         <div className="mt-6 rounded-md border border-border bg-surface p-5 shadow-[var(--shadow-sm)]">
           <div className="space-y-4">
-            <FormField label="Email" required error={errors.email} helperText="We will send a one-time verification code here.">
+            <FormField label="Email" required error={errors.email} >
               <Input ref={(node) => { fieldRefs.current.email = node; }} value={values.email} onChange={(event) => updateField("email", event.target.value)} inputMode="email" placeholder="you@example.com" className={errorClass(errors.email)} />
             </FormField>
 
