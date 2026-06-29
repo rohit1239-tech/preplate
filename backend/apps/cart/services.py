@@ -1,5 +1,6 @@
 import logging
 import random
+from datetime import datetime
 from decimal import Decimal
 
 from django.core.cache import cache
@@ -18,11 +19,18 @@ logger = logging.getLogger(__name__)
 
 class CartValidationService:
     @classmethod
+    def get_cutoff_at(cls, cart: Cart) -> datetime:
+        """Return the exact local cutoff datetime for the cart's delivery slot."""
+        cutoff_at = datetime.combine(cart.delivery_date, cart.slot.cutoff_time)
+        return timezone.make_aware(cutoff_at, timezone.get_current_timezone())
+
+    @classmethod
     def validate_cutoff(cls, cart: Cart) -> None:
-        today = timezone.localdate()
-        if cart.delivery_date < today:
-            raise ValidationError("Delivery date cannot be in the past.")
-        if cart.delivery_date == today and timezone.localtime().time() >= cart.slot.cutoff_time:
+        now = timezone.localtime(timezone.now())
+        today = now.date()
+        if cart.delivery_date != today:
+            raise ValidationError("Delivery date must be today.")
+        if now >= cls.get_cutoff_at(cart):
             raise ValidationError(f"Ordering is closed for {cart.slot.name} today.")
 
     @classmethod
@@ -39,7 +47,9 @@ class CartValidationService:
         if not cart.items.exists():
             raise ValidationError("Cart has no items.")
         cls.validate_cutoff(cart)
-        unavailable = cart.items.filter(menu_item__is_available=False) | cart.items.filter(menu_item__is_active=False)
+        unavailable = cart.items.filter(
+            menu_item__is_available=False
+        ) | cart.items.filter(menu_item__is_active=False)
         if unavailable.exists():
             raise ValidationError("Some cart items are no longer available.")
 
@@ -53,7 +63,9 @@ class CartValidationService:
                 delivery_location__is_active=True,
             )
         except RestaurantDeliveryLocation.DoesNotExist as exc:
-            raise ValidationError("Restaurant does not serve this delivery location.") from exc
+            raise ValidationError(
+                "Restaurant does not serve this delivery location."
+            ) from exc
 
     @classmethod
     def validate_capacity(cls, cart: Cart) -> None:
@@ -70,23 +82,62 @@ class CartValidationService:
             .count()
         )
         if current_orders >= service_location.capacity_per_slot:
-            raise ValidationError("Restaurant delivery capacity exceeded for this location and slot.")
+            raise ValidationError(
+                "Restaurant delivery capacity exceeded for this location and slot."
+            )
 
 
 class CartService:
     @classmethod
     @transaction.atomic
-    def initialize_cart(cls, customer, restaurant, delivery_location, slot, delivery_date) -> Cart:
-        logger.info("cart_initialize_requested", extra={"user_id": str(customer.id), "restaurant_id": str(restaurant.id), "delivery_location_id": str(delivery_location.id), "slot_id": str(slot.id), "delivery_date": delivery_date})
+    def initialize_cart(
+        cls, customer, restaurant, delivery_location, slot, delivery_date
+    ) -> Cart:
+        logger.info(
+            "cart_initialize_requested",
+            extra={
+                "user_id": str(customer.id),
+                "restaurant_id": str(restaurant.id),
+                "delivery_location_id": str(delivery_location.id),
+                "slot_id": str(slot.id),
+                "delivery_date": delivery_date,
+            },
+        )
         if slot.restaurant_id != restaurant.id:
-            logger.warning("cart_initialize_rejected_mismatched_slot", extra={"user_id": str(customer.id), "restaurant_id": str(restaurant.id), "delivery_location_id": str(delivery_location.id), "slot_id": str(slot.id)})
+            logger.warning(
+                "cart_initialize_rejected_mismatched_slot",
+                extra={
+                    "user_id": str(customer.id),
+                    "restaurant_id": str(restaurant.id),
+                    "delivery_location_id": str(delivery_location.id),
+                    "slot_id": str(slot.id),
+                },
+            )
             raise ValidationError("Slot must belong to the selected restaurant.")
-        if not RestaurantDeliveryLocation.objects.filter(restaurant=restaurant, delivery_location=delivery_location, is_active=True, delivery_location__is_active=True).exists():
-            logger.warning("cart_initialize_rejected_unserved_location", extra={"user_id": str(customer.id), "restaurant_id": str(restaurant.id), "delivery_location_id": str(delivery_location.id), "slot_id": str(slot.id)})
+        if not RestaurantDeliveryLocation.objects.filter(
+            restaurant=restaurant,
+            delivery_location=delivery_location,
+            is_active=True,
+            delivery_location__is_active=True,
+        ).exists():
+            logger.warning(
+                "cart_initialize_rejected_unserved_location",
+                extra={
+                    "user_id": str(customer.id),
+                    "restaurant_id": str(restaurant.id),
+                    "delivery_location_id": str(delivery_location.id),
+                    "slot_id": str(slot.id),
+                },
+            )
             raise ValidationError("Restaurant does not serve this delivery location.")
-        abandoned_count = Cart.objects.filter(customer=customer, status=Cart.Status.ACTIVE).update(status=Cart.Status.ABANDONED)
+        abandoned_count = Cart.objects.filter(
+            customer=customer, status=Cart.Status.ACTIVE
+        ).update(status=Cart.Status.ABANDONED)
         if abandoned_count:
-            logger.info("active_carts_abandoned", extra={"user_id": str(customer.id), "count": abandoned_count})
+            logger.info(
+                "active_carts_abandoned",
+                extra={"user_id": str(customer.id), "count": abandoned_count},
+            )
         cart = Cart.objects.create(
             customer=customer,
             restaurant=restaurant,
@@ -95,21 +146,54 @@ class CartService:
             delivery_date=delivery_date,
         )
         CartValidationService.validate_cutoff(cart)
-        logger.info("cart_initialized", extra={"cart_id": str(cart.id), "user_id": str(customer.id), "restaurant_id": str(restaurant.id)})
+        logger.info(
+            "cart_initialized",
+            extra={
+                "cart_id": str(cart.id),
+                "user_id": str(customer.id),
+                "restaurant_id": str(restaurant.id),
+            },
+        )
         return cart
 
     @classmethod
     @transaction.atomic
     def add_item(cls, cart: Cart, menu_item: MenuItem, quantity: int) -> CartItem:
-        logger.info("cart_add_item_requested", extra={"cart_id": str(cart.id), "menu_item_id": str(menu_item.id), "quantity": quantity})
+        logger.info(
+            "cart_add_item_requested",
+            extra={
+                "cart_id": str(cart.id),
+                "menu_item_id": str(menu_item.id),
+                "quantity": quantity,
+            },
+        )
         if cart.status != Cart.Status.ACTIVE:
-            logger.warning("cart_add_item_rejected_inactive_cart", extra={"cart_id": str(cart.id), "status": cart.status})
+            logger.warning(
+                "cart_add_item_rejected_inactive_cart",
+                extra={"cart_id": str(cart.id), "status": cart.status},
+            )
             raise ValidationError("Cart is not active.")
         if menu_item.restaurant_id != cart.restaurant_id:
-            logger.warning("cart_add_item_rejected_wrong_restaurant", extra={"cart_id": str(cart.id), "menu_item_id": str(menu_item.id), "cart_restaurant_id": str(cart.restaurant_id), "item_restaurant_id": str(menu_item.restaurant_id)})
+            logger.warning(
+                "cart_add_item_rejected_wrong_restaurant",
+                extra={
+                    "cart_id": str(cart.id),
+                    "menu_item_id": str(menu_item.id),
+                    "cart_restaurant_id": str(cart.restaurant_id),
+                    "item_restaurant_id": str(menu_item.restaurant_id),
+                },
+            )
             raise ValidationError("Menu item must belong to cart restaurant.")
         if not menu_item.is_available or not menu_item.is_active:
-            logger.warning("cart_add_item_rejected_unavailable_item", extra={"cart_id": str(cart.id), "menu_item_id": str(menu_item.id), "is_available": menu_item.is_available, "is_active": menu_item.is_active})
+            logger.warning(
+                "cart_add_item_rejected_unavailable_item",
+                extra={
+                    "cart_id": str(cart.id),
+                    "menu_item_id": str(menu_item.id),
+                    "is_available": menu_item.is_available,
+                    "is_active": menu_item.is_active,
+                },
+            )
             raise ValidationError("Menu item is not available.")
         item, created = CartItem.objects.get_or_create(
             cart=cart,
@@ -119,13 +203,29 @@ class CartService:
         if not created:
             item.quantity += quantity
             item.save(update_fields=["quantity", "updated_at"])
-        logger.info("cart_item_saved", extra={"cart_id": str(cart.id), "cart_item_id": str(item.id), "menu_item_id": str(menu_item.id), "quantity": item.quantity, "item_created": created})
+        logger.info(
+            "cart_item_saved",
+            extra={
+                "cart_id": str(cart.id),
+                "cart_item_id": str(item.id),
+                "menu_item_id": str(menu_item.id),
+                "quantity": item.quantity,
+                "item_created": created,
+            },
+        )
         return item
 
     @classmethod
     @transaction.atomic
     def checkout(cls, cart: Cart, payment_method: str, actor) -> Order:
-        logger.info("cart_checkout_requested", extra={"cart_id": str(cart.id), "actor_id": str(actor.id), "payment_method": payment_method})
+        logger.info(
+            "cart_checkout_requested",
+            extra={
+                "cart_id": str(cart.id),
+                "actor_id": str(actor.id),
+                "payment_method": payment_method,
+            },
+        )
         cart = Cart.objects.select_for_update().get(pk=cart.pk)
         CartValidationService.validate_cart(cart)
         CartValidationService.validate_capacity(cart)
@@ -157,10 +257,21 @@ class CartService:
                 line_total=item.line_total,
             )
         Payment.objects.create(order=order, method=payment_method, amount=total)
-        OrderStatusHistory.objects.create(order=order, from_status="", to_status=Order.Status.PLACED, changed_by=actor)
+        OrderStatusHistory.objects.create(
+            order=order, from_status="", to_status=Order.Status.PLACED, changed_by=actor
+        )
         cart.status = Cart.Status.CHECKED_OUT
         cart.save(update_fields=["status", "updated_at"])
-        logger.info("cart_checkout_succeeded", extra={"cart_id": str(cart.id), "order_id": str(order.id), "order_number": order.order_number, "total": str(total), "item_count": len(cart_items)})
+        logger.info(
+            "cart_checkout_succeeded",
+            extra={
+                "cart_id": str(cart.id),
+                "order_id": str(order.id),
+                "order_number": order.order_number,
+                "total": str(total),
+                "item_count": len(cart_items),
+            },
+        )
         return order
 
     @staticmethod
@@ -183,7 +294,9 @@ class CartService:
             try:
                 sequence = int(latest.rsplit("-", 1)[1]) + 1
             except (IndexError, ValueError):
-                sequence = Order.objects.filter(order_number__startswith=prefix).count() + 1
+                sequence = (
+                    Order.objects.filter(order_number__startswith=prefix).count() + 1
+                )
 
         cache.set(f"orders:sequence:{today}", sequence, 60 * 60 * 48)
         return f"{prefix}{sequence:06d}"

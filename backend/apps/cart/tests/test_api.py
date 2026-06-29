@@ -71,7 +71,7 @@ class CartCheckoutAPITests(TestCase):
             self.restaurant,
             self.location,
             self.slot,
-            timezone.localdate() + timedelta(days=1),
+            timezone.localdate(),
         )
         CartService.add_item(cart, self.item, 1)
         return cart
@@ -98,6 +98,22 @@ class CartCheckoutAPITests(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_initialize_cart_rejects_future_delivery_date(self) -> None:
+        self.client.force_authenticate(user=self.customer)
+
+        response = self.client.post(
+            "/api/v1/cart/",
+            {
+                "restaurant_id": str(self.restaurant.id),
+                "delivery_location_id": str(self.location.id),
+                "slot_id": str(self.slot.id),
+                "delivery_date": str(timezone.localdate() + timedelta(days=1)),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_checkout_cannot_access_another_customers_cart(self) -> None:
         cart = self._active_cart()

@@ -1,5 +1,6 @@
-from datetime import date, time, timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.utils import timezone
@@ -18,8 +19,16 @@ from apps.slots.models import DeliverySlot
 
 class CartServiceTests(TestCase):
     def setUp(self):
-        self.customer = User.objects.create_user(email="user9000000001@preplate.local", phone="9000000001", role=User.Role.CUSTOMER)
-        self.owner = User.objects.create_user(email="user9000000002@preplate.local", phone="9000000002", role=User.Role.RESTAURANT_ADMIN)
+        self.customer = User.objects.create_user(
+            email="user9000000001@preplate.local",
+            phone="9000000001",
+            role=User.Role.CUSTOMER,
+        )
+        self.owner = User.objects.create_user(
+            email="user9000000002@preplate.local",
+            phone="9000000002",
+            role=User.Role.RESTAURANT_ADMIN,
+        )
         self.restaurant = Restaurant.objects.create(
             owner=self.owner,
             name="Kitchen",
@@ -42,7 +51,9 @@ class CartServiceTests(TestCase):
             delivery_start_time=time(12, 0),
             delivery_end_time=time(13, 0),
         )
-        self.category = MenuCategory.objects.create(restaurant=self.restaurant, name="Meals")
+        self.category = MenuCategory.objects.create(
+            restaurant=self.restaurant, name="Meals"
+        )
         self.item = MenuItem.objects.create(
             restaurant=self.restaurant,
             category=self.category,
@@ -56,7 +67,7 @@ class CartServiceTests(TestCase):
             self.restaurant,
             self.location,
             self.slot,
-            timezone.localdate() + timedelta(days=1),
+            timezone.localdate(),
         )
         CartService.add_item(cart, self.item, 2)
 
@@ -78,18 +89,22 @@ class CartServiceTests(TestCase):
             self.restaurant,
             self.location,
             self.slot,
-            timezone.localdate() + timedelta(days=1),
+            timezone.localdate(),
         )
         CartService.add_item(first_cart, self.item, 1)
         CartService.checkout(first_cart, Payment.Method.COD, self.customer)
 
-        second_customer = User.objects.create_user(email="user9000000004@preplate.local", phone="9000000004", role=User.Role.CUSTOMER)
+        second_customer = User.objects.create_user(
+            email="user9000000004@preplate.local",
+            phone="9000000004",
+            role=User.Role.CUSTOMER,
+        )
         second_cart = CartService.initialize_cart(
             second_customer,
             self.restaurant,
             self.location,
             self.slot,
-            timezone.localdate() + timedelta(days=1),
+            timezone.localdate(),
         )
         CartService.add_item(second_cart, self.item, 1)
 
@@ -122,11 +137,13 @@ class CartServiceTests(TestCase):
                 self.restaurant,
                 self.location,
                 other_slot,
-                timezone.localdate() + timedelta(days=1),
+                timezone.localdate(),
             )
 
     def test_initialize_cart_rejects_unserved_location(self):
-        unserved_location = DeliveryLocation.objects.create(name="Remote Gate", address="Far side")
+        unserved_location = DeliveryLocation.objects.create(
+            name="Remote Gate", address="Far side"
+        )
 
         with self.assertRaises(ValidationError):
             CartService.initialize_cart(
@@ -134,7 +151,7 @@ class CartServiceTests(TestCase):
                 self.restaurant,
                 unserved_location,
                 self.slot,
-                timezone.localdate() + timedelta(days=1),
+                timezone.localdate(),
             )
 
     def test_past_delivery_date_is_rejected(self):
@@ -143,11 +160,71 @@ class CartServiceTests(TestCase):
             restaurant=self.restaurant,
             delivery_location=self.location,
             slot=self.slot,
-            delivery_date=date.today() - timedelta(days=1),
+            delivery_date=timezone.localdate() - timedelta(days=1),
         )
         CartService.add_item(cart, self.item, 1)
 
         with self.assertRaises(ValidationError):
+            CartService.checkout(cart, Payment.Method.COD, self.customer)
+
+    def test_future_delivery_date_is_rejected(self):
+        with self.assertRaises(ValidationError):
+            CartService.initialize_cart(
+                self.customer,
+                self.restaurant,
+                self.location,
+                self.slot,
+                timezone.localdate() + timedelta(days=1),
+            )
+
+    def test_initialize_cart_rejects_after_slot_cutoff(self):
+        cutoff_slot = DeliverySlot.objects.create(
+            restaurant=self.restaurant,
+            name="Dinner",
+            cutoff_time=time(18, 0),
+            delivery_start_time=time(19, 0),
+            delivery_end_time=time(20, 0),
+        )
+        now = timezone.make_aware(
+            datetime.combine(timezone.localdate(), time(18, 0)),
+            timezone.get_current_timezone(),
+        )
+
+        with patch(
+            "apps.cart.services.timezone.now", return_value=now
+        ), self.assertRaises(ValidationError):
+            CartService.initialize_cart(
+                self.customer,
+                self.restaurant,
+                self.location,
+                cutoff_slot,
+                timezone.localdate(),
+            )
+
+    def test_checkout_rejects_existing_cart_after_slot_cutoff(self):
+        cutoff_slot = DeliverySlot.objects.create(
+            restaurant=self.restaurant,
+            name="Dinner",
+            cutoff_time=time(18, 0),
+            delivery_start_time=time(19, 0),
+            delivery_end_time=time(20, 0),
+        )
+        cart = Cart.objects.create(
+            customer=self.customer,
+            restaurant=self.restaurant,
+            delivery_location=self.location,
+            slot=cutoff_slot,
+            delivery_date=timezone.localdate(),
+        )
+        CartService.add_item(cart, self.item, 1)
+        now = timezone.make_aware(
+            datetime.combine(timezone.localdate(), time(18, 1)),
+            timezone.get_current_timezone(),
+        )
+
+        with patch(
+            "apps.cart.services.timezone.now", return_value=now
+        ), self.assertRaises(ValidationError):
             CartService.checkout(cart, Payment.Method.COD, self.customer)
 
     def test_order_number_uses_existing_orders_when_cache_is_empty(self):
@@ -156,15 +233,20 @@ class CartServiceTests(TestCase):
             self.restaurant,
             self.location,
             self.slot,
-            timezone.localdate() + timedelta(days=1),
+            timezone.localdate(),
         )
         CartService.add_item(cart, self.item, 1)
         first_order = CartService.checkout(cart, Payment.Method.COD, self.customer)
 
         from django.core.cache import cache
+
         cache.clear()
 
-        second_customer = User.objects.create_user(email="user9000000005@preplate.local", phone="9000000005", role=User.Role.CUSTOMER)
+        second_customer = User.objects.create_user(
+            email="user9000000005@preplate.local",
+            phone="9000000005",
+            role=User.Role.CUSTOMER,
+        )
         second_location = DeliveryLocation.objects.create(
             name="Gate B",
             address="Second gate",
@@ -179,10 +261,12 @@ class CartServiceTests(TestCase):
             self.restaurant,
             second_location,
             self.slot,
-            timezone.localdate() + timedelta(days=1),
+            timezone.localdate(),
         )
         CartService.add_item(second_cart, self.item, 1)
-        second_order = CartService.checkout(second_cart, Payment.Method.COD, second_customer)
+        second_order = CartService.checkout(
+            second_cart, Payment.Method.COD, second_customer
+        )
 
         self.assertNotEqual(first_order.order_number, second_order.order_number)
         self.assertTrue(second_order.order_number.endswith("000002"))

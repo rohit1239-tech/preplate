@@ -3,12 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, CalendarDays, LocateFixed, MapPin } from "lucide-react";
+import { ArrowRight, LocateFixed, MapPin } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { formatDateLabel, tomorrowIsoDate } from "@/lib/date";
 import { createLocationRequest, listDeliveryLocations } from "@/services/api";
 import { queryKeys } from "@/services/query-keys";
 import { useOrderContextStore } from "@/store";
@@ -18,7 +17,7 @@ type RequestForm = { name: string; address: string; note: string; latitude: stri
 export default function LocationsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { deliveryLocationId, deliveryDate, setDeliveryLocation, setDeliveryDate, setSlot } = useOrderContextStore();
+  const { deliveryLocationId, setDeliveryLocation, setSlot } = useOrderContextStore();
   const [requestForm, setRequestForm] = useState<RequestForm>({ name: "", address: "", note: "", latitude: null, longitude: null });
   const [geoStatus, setGeoStatus] = useState("");
   const locations = useQuery({ queryKey: queryKeys.locations(), queryFn: () => listDeliveryLocations({ page_size: 50 }) });
@@ -81,8 +80,7 @@ export default function LocationsPage() {
             <Card>
               <CardHeader><CardTitle>Pickup details</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                <label className="block space-y-2"><span className="text-sm font-medium">Delivery date</span><input type="date" min={tomorrowIsoDate()} value={deliveryDate} onChange={(event) => setDeliveryDate(event.target.value)} className="h-11 w-full rounded-md border border-border bg-surface px-3" /></label>
-                <div className="rounded-md bg-surface-subtle p-3 text-sm text-text-secondary"><CalendarDays className="mr-2 inline size-4" /> {formatDateLabel(deliveryDate)} <span className="ml-2 font-medium text-text-primary">{selectedLocation?.name ?? "Choose pickup"}</span></div>
+                <div className="rounded-md bg-surface-subtle p-3 text-sm text-text-secondary">Orders are accepted for today only. <span className="ml-2 font-medium text-text-primary">{selectedLocation?.name ?? "Choose pickup"}</span></div>
                 <Button className="w-full" disabled={!deliveryLocationId} onClick={() => router.push("/restaurants")}>Show restaurants <ArrowRight className="size-4" /></Button>
               </CardContent>
             </Card>

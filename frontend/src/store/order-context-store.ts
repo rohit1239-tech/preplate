@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { tomorrowIsoDate } from "@/lib/date";
+import { todayIsoDate } from "@/lib/date";
 
 interface OrderContextState {
   deliveryLocationId: string | null;
@@ -13,10 +13,10 @@ interface OrderContextState {
 
 export const useOrderContextStore = create<OrderContextState>((set) => ({
   deliveryLocationId: null,
-  deliveryDate: tomorrowIsoDate(),
+  deliveryDate: todayIsoDate(),
   slotId: null,
   setDeliveryLocation: (deliveryLocationId) => set({ deliveryLocationId }),
   setDeliveryDate: (deliveryDate) => set({ deliveryDate }),
   setSlot: (slotId) => set({ slotId }),
-  reset: () => set({ deliveryLocationId: null, deliveryDate: tomorrowIsoDate(), slotId: null }),
+  reset: () => set({ deliveryLocationId: null, deliveryDate: todayIsoDate(), slotId: null }),
 }));

@@ -2,17 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
-import { Lock, Mail } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Clock, Lock, Mail } from "lucide-react";
 
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OtpInput } from "@/components/ui/otp-input";
+import { formatCountdown, formatTime, secondsUntilSlotCutoff, todayIsoDate } from "@/lib/date";
 import { cn, formatMoney } from "@/lib/utils";
 import { firstAuthErrorField, type AuthField, type AuthFieldErrors, type AuthFormValues, type AuthMode, validateAuthForm } from "@/features/auth/validation";
-import { addCartItem, checkoutCart, initializeCart, resendOtp, sendOtp, verifyOtp } from "@/services/api";
+import { addCartItem, checkoutCart, initializeCart, listSlots, resendOtp, sendOtp, verifyOtp } from "@/services/api";
 import { ApiError } from "@/services/api/errors";
+import { queryKeys } from "@/services/query-keys";
 import { getCartTotal, useAuthStore, useLocalCartStore, useOrderContextStore } from "@/store";
 import type { VerifyOtpRequest } from "@/types";
 
@@ -40,12 +42,24 @@ export default function CheckoutPage() {
   const [otpSent, setOtpSent] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [resendLocked, setResendLocked] = useState(false);
+  const [now, setNow] = useState(() => new Date());
   const fieldRefs = useRef<Partial<Record<AuthField, HTMLInputElement | HTMLTextAreaElement | null>>>({});
   const { user, setSession } = useAuthStore();
   const { restaurant, items, clear } = useLocalCartStore();
-  const { deliveryLocationId, deliveryDate, slotId } = useOrderContextStore();
+  const { deliveryLocationId, slotId } = useOrderContextStore();
   const total = getCartTotal(items);
   const isCustomer = user?.role === "CUSTOMER";
+  const effectiveDeliveryDate = todayIsoDate();
+  const slots = useQuery({
+    queryKey: queryKeys.slots({ restaurant: restaurant?.id, checkout: true }),
+    queryFn: () => listSlots({ restaurant: restaurant!.id, page_size: 50 }),
+    enabled: Boolean(restaurant?.id),
+  });
+  const selectedSlot = slots.data?.results.find((slot) => slot.id === slotId);
+  const cutoffSeconds = selectedSlot ? secondsUntilSlotCutoff(effectiveDeliveryDate, selectedSlot.cutoff_time, now) : null;
+  const isCutoffClosed = cutoffSeconds !== null && cutoffSeconds <= 0;
+  const isCutoffUrgent = cutoffSeconds !== null && cutoffSeconds > 0 && cutoffSeconds <= 10 * 60;
+  const canPlaceOrder = isCustomer && items.length > 0 && Boolean(restaurant && deliveryLocationId && selectedSlot) && !isCutoffClosed;
 
   const sendOtpMutation = useMutation({
     mutationFn: () => sendOtp({ email: values.email.trim().toLowerCase(), role: "CUSTOMER", intent: mode === "signup" ? "SIGNUP" : "LOGIN" }),
@@ -96,7 +110,8 @@ export default function CheckoutPage() {
     mutationFn: async () => {
       if (!isCustomer) throw new Error("Sign in with a customer account before placing your order.");
       if (!restaurant || !deliveryLocationId || !slotId) throw new Error("Choose location, slot, and restaurant first.");
-      const cart = await initializeCart({ restaurant_id: restaurant.id, delivery_location_id: deliveryLocationId, slot_id: slotId, delivery_date: deliveryDate });
+      if (isCutoffClosed) throw new Error("Ordering is closed for this slot today.");
+      const cart = await initializeCart({ restaurant_id: restaurant.id, delivery_location_id: deliveryLocationId, slot_id: slotId, delivery_date: effectiveDeliveryDate });
       for (const item of items) await addCartItem(cart.id, { menu_item_id: item.menuItem.id, quantity: item.quantity });
       return checkoutCart(cart.id, { payment_method: "COD" });
     },
@@ -144,6 +159,11 @@ export default function CheckoutPage() {
     }, 1000);
     return () => window.clearInterval(timer);
   }, [cooldown]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const resendDisabled = verifyOtpMutation.isPending || cooldown > 0 || resendLocked;
 
@@ -217,7 +237,13 @@ export default function CheckoutPage() {
             <div className="flex justify-between text-lg font-semibold text-text-primary"><span>Total</span><span>{formatMoney(total)}</span></div>
             <p className="mt-3 text-base text-text-secondary">Cash on Delivery</p>
           </div>
-          <Button className="mt-7 h-14 w-full text-lg" disabled={!isCustomer || !items.length} isLoading={placeOrderMutation.isPending} onClick={() => placeOrderMutation.mutate()}>Place COD order</Button>
+          {selectedSlot ? (
+            <div className={cn("mt-5 rounded-md border p-3 text-sm", isCutoffClosed ? "border-error bg-error-surface text-error" : isCutoffUrgent ? "border-warning bg-warning-surface text-warning" : "border-border bg-surface-subtle text-text-secondary")}>
+              <Clock className="mr-2 inline size-4" />
+              {isCutoffClosed ? `${selectedSlot.name} ordering is closed for today.` : isCutoffUrgent ? `${formatCountdown(cutoffSeconds ?? 0)} left to order ${selectedSlot.name}.` : `${selectedSlot.name} closes at ${formatTime(selectedSlot.cutoff_time)} today.`}
+            </div>
+          ) : null}
+          <Button className="mt-7 h-14 w-full text-lg" disabled={!canPlaceOrder} isLoading={placeOrderMutation.isPending} onClick={() => placeOrderMutation.mutate()}>Place COD order</Button>
           {placeOrderMutation.error ? <p className="mt-3 text-sm text-error">{String(placeOrderMutation.error.message)}</p> : null}
         </aside>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Clock, ShoppingBag, Star } from "lucide-react";
@@ -12,7 +12,7 @@ import { listMenuItems, getRestaurant, listSlots } from "@/services/api";
 import { queryKeys } from "@/services/query-keys";
 import { getCartTotal, useLocalCartStore, useOrderContextStore } from "@/store";
 import { formatMoney } from "@/lib/utils";
-import { formatTime } from "@/lib/date";
+import { formatCountdown, formatTime, secondsUntilSlotCutoff, todayIsoDate } from "@/lib/date";
 import type { DeliverySlot } from "@/types";
 
 const SLOT_NAMES = ["Lunch", "Dinner"] as const;
@@ -30,14 +30,25 @@ export default function RestaurantMenuPage() {
   const slots = useQuery({ queryKey: queryKeys.slots({ restaurant: restaurantId }), queryFn: () => listSlots({ restaurant: restaurantId, page_size: 50 }) });
   const { items } = useLocalCartStore();
   const { slotId, setSlot } = useOrderContextStore();
+  const [now, setNow] = useState(() => new Date());
   const relevantSlots = useMemo(() => sortSlots(slots.data?.results ?? []), [slots.data?.results]);
   const selectedSlot = relevantSlots.find((slot) => slot.id === slotId);
+  const deliveryDate = todayIsoDate();
   const totalItems = items.reduce((total, item) => total + item.quantity, 0);
   const total = getCartTotal(items);
 
   useEffect(() => {
     if (slotId && !relevantSlots.some((slot) => slot.id === slotId)) setSlot(null);
   }, [relevantSlots, setSlot, slotId]);
+
+  useEffect(() => {
+    if (selectedSlot && secondsUntilSlotCutoff(deliveryDate, selectedSlot.cutoff_time, now) <= 0) setSlot(null);
+  }, [deliveryDate, now, selectedSlot, setSlot]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   if (!restaurant.data) return <main className="min-h-screen bg-background p-4">Loading restaurant...</main>;
 
@@ -63,10 +74,13 @@ export default function RestaurantMenuPage() {
             {SLOT_NAMES.map((name) => {
               const slot = relevantSlots.find((item) => item.name === name);
               const active = slot?.id === slotId;
+              const secondsLeft = slot ? secondsUntilSlotCutoff(deliveryDate, slot.cutoff_time, now) : null;
+              const closed = secondsLeft !== null && secondsLeft <= 0;
+              const urgent = secondsLeft !== null && secondsLeft > 0 && secondsLeft <= 10 * 60;
               return (
-                <button key={name} type="button" disabled={!slot} onClick={() => slot && setSlot(slot.id)} className={`rounded-md border px-3 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-45 ${active ? "border-primary bg-primary text-white" : "border-border bg-surface hover:border-border-strong"}`}>
+                <button key={name} type="button" disabled={!slot || closed} onClick={() => slot && !closed && setSlot(slot.id)} className={`rounded-md border px-3 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-45 ${active ? "border-primary bg-primary text-white" : urgent ? "border-warning bg-warning-surface" : "border-border bg-surface hover:border-border-strong"}`}>
                   <span className="block font-medium">{name}</span>
-                  <span className={`mt-1 block text-xs ${active ? "text-white/70" : "text-text-muted"}`}>{slot ? `Order before ${formatTime(slot.cutoff_time)}` : "Not available"}</span>
+                  <span className={`mt-1 block text-xs ${active ? "text-white/70" : closed ? "text-error" : urgent ? "text-warning" : "text-text-muted"}`}>{slot ? closed ? "Closed for today" : urgent ? `${formatCountdown(secondsLeft ?? 0)} left to order` : `Order before ${formatTime(slot.cutoff_time)}` : "Not available"}</span>
                 </button>
               );
             })}
