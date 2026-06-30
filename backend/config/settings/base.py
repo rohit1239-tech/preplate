@@ -120,19 +120,17 @@ ASGI_APPLICATION = "config.asgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": env("DATABASE_NAME"),
-        "USER": env("DATABASE_USER"),
-        "PASSWORD": env("DATABASE_PASSWORD"),
-        "HOST": env("DATABASE_HOST"),
-        "PORT": env("DATABASE_PORT"),
+        **env.db(
+            "DATABASE_URL",
+            default="postgres://postgres:postgres@localhost:5432/preplate",
+        ),
         "CONN_MAX_AGE": env.int("DATABASE_CONN_MAX_AGE", default=60),
         "CONN_HEALTH_CHECKS": env.bool("DATABASE_CONN_HEALTH_CHECKS", default=True),
         "DISABLE_SERVER_SIDE_CURSORS": env.bool(
             "DATABASE_DISABLE_SERVER_SIDE_CURSORS",
             default=False,
         ),
-    }
+    },
 }
 
 # ------------------------------------------------------------------------------
@@ -209,8 +207,12 @@ REST_FRAMEWORK = {
 # ------------------------------------------------------------------------------
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        minutes=env.int("ACCESS_TOKEN_LIFETIME", default=15)
+    ),
+    "REFRESH_TOKEN_LIFETIME": timedelta(
+        days=env.int("REFRESH_TOKEN_LIFETIME", default=7)
+    ),
 }
 
 # ------------------------------------------------------------------------------
