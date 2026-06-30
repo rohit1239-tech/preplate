@@ -126,6 +126,12 @@ DATABASES = {
         "PASSWORD": env("DATABASE_PASSWORD"),
         "HOST": env("DATABASE_HOST"),
         "PORT": env("DATABASE_PORT"),
+        "CONN_MAX_AGE": env.int("DATABASE_CONN_MAX_AGE", default=60),
+        "CONN_HEALTH_CHECKS": env.bool("DATABASE_CONN_HEALTH_CHECKS", default=True),
+        "DISABLE_SERVER_SIDE_CURSORS": env.bool(
+            "DATABASE_DISABLE_SERVER_SIDE_CURSORS",
+            default=False,
+        ),
     }
 }
 
