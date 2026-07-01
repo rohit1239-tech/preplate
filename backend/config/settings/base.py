@@ -237,32 +237,60 @@ SPECTACULAR_SETTINGS = {
 # REDIS
 # ------------------------------------------------------------------------------
 
-REDIS_URL = env("REDIS_URL")
+REDIS_URL = env("REDIS_URL", default=None)
+UPSTASH_REDIS_REST_URL = env("UPSTASH_REDIS_REST_URL", default=None)
+UPSTASH_REDIS_REST_TOKEN = env("UPSTASH_REDIS_REST_TOKEN", default=None)
 
 # ------------------------------------------------------------------------------
 # CACHE
 # ------------------------------------------------------------------------------
 
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": REDIS_URL,
-        "KEY_PREFIX": "preplate",
+if UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN:
+    CACHES = {
+        "default": {
+            "BACKEND": "config.cache.UpstashRedisCache",
+            "LOCATION": UPSTASH_REDIS_REST_URL,
+            "KEY_PREFIX": "preplate",
+            "OPTIONS": {
+                "TOKEN": UPSTASH_REDIS_REST_TOKEN,
+            },
+        }
     }
-}
+elif REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+            "KEY_PREFIX": "preplate",
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "preplate-local",
+        }
+    }
 
 # ------------------------------------------------------------------------------
 # CHANNELS
 # ------------------------------------------------------------------------------
 
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [REDIS_URL],
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [REDIS_URL],
+            },
         },
-    },
-}
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        },
+    }
 
 # ------------------------------------------------------------------------------
 # CELERY
