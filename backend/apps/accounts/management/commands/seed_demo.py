@@ -17,9 +17,13 @@ class Command(BaseCommand):
     help = "Seed deterministic demo data for local MVP testing."
 
     def handle(self, *args, **options):
-        platform_admin = self._user("platform@preplate.local", User.Role.PLATFORM_ADMIN, None)
-        restaurant_owner = self._user("restaurant@preplate.local", User.Role.RESTAURANT_ADMIN, "9999990001")
-        customer = self._user("customer@preplate.local", User.Role.CUSTOMER, "9999990002")
+        self._user("platform@preplate.local", User.Role.PLATFORM_ADMIN, None)
+        restaurant_owner = self._user(
+            "restaurant@preplate.local", User.Role.RESTAURANT_ADMIN, "9999990001"
+        )
+        customer = self._user(
+            "customer@preplate.local", User.Role.CUSTOMER, "9999990002"
+        )
 
         bowl_house = self._restaurant(
             owner=restaurant_owner,
@@ -43,12 +47,20 @@ class Command(BaseCommand):
             status=Restaurant.Status.PENDING,
         )
 
-        hostel_a = self._location(bowl_house, "Hostel A", "North campus, near block A", 80)
-        college_gate = self._location(bowl_house, "College Gate", "Main entrance gate", 60)
-        office_park = self._location(south_street, "Office Park", "Tower 2 pickup bay", 50)
+        hostel_a = self._location(
+            bowl_house, "Hostel A", "North campus, near block A", 80
+        )
+        college_gate = self._location(
+            bowl_house, "College Gate", "Main entrance gate", 60
+        )
+        office_park = self._location(
+            south_street, "Office Park", "Tower 2 pickup bay", 50
+        )
         self._location(south_street, "Hostel A", "North campus, near block A", 70)
 
-        lunch = self._slot(bowl_house, "Lunch", time(10, 30), time(12, 15), time(13, 15))
+        lunch = self._slot(
+            bowl_house, "Lunch", time(10, 30), time(12, 15), time(13, 15)
+        )
         self._slot(bowl_house, "Dinner", time(17, 30), time(19, 15), time(20, 15))
         self._slot(south_street, "Lunch", time(10, 45), time(12, 30), time(13, 30))
         self._slot(south_street, "Dinner", time(17, 45), time(19, 30), time(20, 30))
@@ -58,12 +70,48 @@ class Command(BaseCommand):
         meals = self._category(south_street, "Meals", 1)
         drinks = self._category(south_street, "Drinks", 2)
 
-        thali = self._item(bowl_house, bowls, "Paneer Protein Bowl", "Paneer, jeera rice, salad, and house chutney.", Decimal("180.00"))
-        self._item(bowl_house, bowls, "Rajma Rice Bowl", "Slow-cooked rajma with steamed rice and onion salad.", Decimal("140.00"))
-        self._item(bowl_house, sides, "Masala Curd", "Cooling curd with roasted cumin.", Decimal("45.00"))
-        self._item(south_street, meals, "Mini Tiffin", "Idli, dosa, pongal, vada, and sambar.", Decimal("160.00"))
-        self._item(south_street, meals, "Lemon Rice Box", "Lemon rice, poriyal, pickle, and curd.", Decimal("130.00"))
-        self._item(south_street, drinks, "Filter Coffee", "Fresh decoction, served hot.", Decimal("40.00"))
+        thali = self._item(
+            bowl_house,
+            bowls,
+            "Paneer Protein Bowl",
+            "Paneer, jeera rice, salad, and house chutney.",
+            Decimal("180.00"),
+        )
+        self._item(
+            bowl_house,
+            bowls,
+            "Rajma Rice Bowl",
+            "Slow-cooked rajma with steamed rice and onion salad.",
+            Decimal("140.00"),
+        )
+        self._item(
+            bowl_house,
+            sides,
+            "Masala Curd",
+            "Cooling curd with roasted cumin.",
+            Decimal("45.00"),
+        )
+        self._item(
+            south_street,
+            meals,
+            "Mini Tiffin",
+            "Idli, dosa, pongal, vada, and sambar.",
+            Decimal("160.00"),
+        )
+        self._item(
+            south_street,
+            meals,
+            "Lemon Rice Box",
+            "Lemon rice, poriyal, pickle, and curd.",
+            Decimal("130.00"),
+        )
+        self._item(
+            south_street,
+            drinks,
+            "Filter Coffee",
+            "Fresh decoction, served hot.",
+            Decimal("40.00"),
+        )
 
         order = self._order(customer, bowl_house, hostel_a, lunch)
         if not order.items.exists():
@@ -75,21 +123,35 @@ class Command(BaseCommand):
                 unit_price=thali.price,
                 line_total=thali.price,
             )
-        Payment.objects.get_or_create(order=order, defaults={"method": Payment.Method.COD, "amount": order.total})
+        Payment.objects.get_or_create(
+            order=order, defaults={"method": Payment.Method.COD, "amount": order.total}
+        )
         OrderStatusHistory.objects.get_or_create(
             order=order,
             to_status=Order.Status.PLACED,
-            defaults={"from_status": "", "changed_by": customer, "note": "Seeded demo order"},
+            defaults={
+                "from_status": "",
+                "changed_by": customer,
+                "note": "Seeded demo order",
+            },
         )
 
         self.stdout.write(self.style.SUCCESS("Seeded Preplate demo data."))
-        self.stdout.write("Demo users: platform=platform@preplate.local, restaurant=restaurant@preplate.local, customer=customer@preplate.local")
+        self.stdout.write(
+            "Demo users: platform=platform@preplate.local, restaurant=restaurant@preplate.local, customer=customer@preplate.local"
+        )
         self.stdout.write("Local debug OTP is 123456 when DEBUG=True.")
-        self.stdout.write(f"Created restaurants: {bowl_house.name}, {south_street.name}")
-        self.stdout.write(f"Sample pickup locations: {hostel_a.name}, {college_gate.name}, {office_park.name}")
+        self.stdout.write(
+            f"Created restaurants: {bowl_house.name}, {south_street.name}"
+        )
+        self.stdout.write(
+            f"Sample pickup locations: {hostel_a.name}, {college_gate.name}, {office_park.name}"
+        )
 
     def _user(self, email, role, phone):
-        user, _ = User.objects.get_or_create(email=email, defaults={"role": role, "phone": phone})
+        user, _ = User.objects.get_or_create(
+            email=email, defaults={"role": role, "phone": phone}
+        )
         changed = False
         for field, value in {"role": role, "phone": phone}.items():
             if getattr(user, field) != value:
@@ -102,10 +164,21 @@ class Command(BaseCommand):
     def _restaurant(self, owner, name, phone, description, status):
         restaurant, _ = Restaurant.objects.get_or_create(
             name=name,
-            defaults={"owner": owner, "phone": phone, "description": description, "status": status},
+            defaults={
+                "owner": owner,
+                "phone": phone,
+                "description": description,
+                "status": status,
+            },
         )
         changed = False
-        for field, value in {"owner": owner, "phone": phone, "description": description, "status": status, "is_active": True}.items():
+        for field, value in {
+            "owner": owner,
+            "phone": phone,
+            "description": description,
+            "status": status,
+            "is_active": True,
+        }.items():
             if getattr(restaurant, field) != value:
                 setattr(restaurant, field, value)
                 changed = True
@@ -135,7 +208,12 @@ class Command(BaseCommand):
         slot, _ = DeliverySlot.objects.get_or_create(
             restaurant=restaurant,
             name=name,
-            defaults={"cutoff_time": cutoff, "delivery_start_time": start, "delivery_end_time": end, "is_active": True},
+            defaults={
+                "cutoff_time": cutoff,
+                "delivery_start_time": start,
+                "delivery_end_time": end,
+                "is_active": True,
+            },
         )
         slot.cutoff_time = cutoff
         slot.delivery_start_time = start
@@ -159,7 +237,13 @@ class Command(BaseCommand):
         item, _ = MenuItem.objects.get_or_create(
             restaurant=restaurant,
             name=name,
-            defaults={"category": category, "description": description, "price": price, "is_available": True, "is_active": True},
+            defaults={
+                "category": category,
+                "description": description,
+                "price": price,
+                "is_available": True,
+                "is_active": True,
+            },
         )
         item.category = category
         item.description = description

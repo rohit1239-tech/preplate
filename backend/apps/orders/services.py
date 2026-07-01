@@ -69,7 +69,6 @@ class OrderStateMachine:
                 extra={"order_id": str(order.id), "actor_id": str(actor.id)},
             )
             raise ValidationError("Cancellation reason is required.")
-        cls._validate(order.status, target_status)
         return cls._save_transition(order, target_status, actor, note)
 
     @classmethod

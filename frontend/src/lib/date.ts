@@ -9,11 +9,6 @@ export function todayIsoDate() {
   return localIsoDate(new Date());
 }
 
-export function tomorrowIsoDate() {
-  const date = new Date();
-  date.setDate(date.getDate() + 1);
-  return localIsoDate(date);
-}
 
 export function formatDateLabel(value: string) {
   return new Intl.DateTimeFormat("en-IN", { weekday: "short", month: "short", day: "numeric" }).format(new Date(value));
