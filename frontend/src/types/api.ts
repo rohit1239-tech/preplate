@@ -34,6 +34,11 @@ export interface VerifyOtpRequest {
   restaurant_description?: string;
 }
 
+export interface PasswordLoginRequest {
+  email: string;
+  password: string;
+}
+
 export interface CartInitializeRequest {
   restaurant_id: string;
   delivery_location_id: string;

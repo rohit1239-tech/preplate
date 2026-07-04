@@ -2,9 +2,29 @@ from .base import *
 
 DEBUG = False
 
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
+ALLOWED_HOSTS = list(
+    dict.fromkeys(
+        [
+            *env.list("ALLOWED_HOSTS", default=[]),
+            "preplate.onrender.com",
+        ]
+    )
+)
 
 CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOWED_ORIGINS = env.list(
+    "CORS_ALLOWED_ORIGINS",
+    default=[
+        "http://localhost:3000",
+        "https://preplate.onrender.com",
+    ],
+)
+CSRF_TRUSTED_ORIGINS = env.list(
+    "CSRF_TRUSTED_ORIGINS",
+    default=[
+        "https://preplate.onrender.com",
+    ],
+)
 
 SECURE_SSL_REDIRECT = True
 

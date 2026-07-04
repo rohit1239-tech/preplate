@@ -3,14 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
-import { Building2, Mail, ShieldCheck, UserRound } from "lucide-react";
+import { Building2, LogIn, Mail, ShieldCheck, UserRound } from "lucide-react";
 
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { firstAuthErrorField, type AuthField, type AuthFieldErrors, type AuthFormValues, type AuthMode, validateAuthForm } from "@/features/auth/validation";
-import { sendOtp } from "@/services/api";
+import { loginWithPassword, sendOtp } from "@/services/api";
 import { useAuthStore } from "@/store";
 import type { OtpDeliveryResponse, UserRole, VerifyOtpRequest } from "@/types";
 
@@ -44,6 +44,7 @@ const flowLabels: Record<UserRole, { label: string; title: string; description: 
 
 const emptyValues: AuthFormValues = {
   email: "",
+  password: "",
   firstName: "",
   lastName: "",
   mobile: "",
@@ -71,6 +72,7 @@ function errorClass(error?: string) {
 export function LoginClient({ initialRole }: { initialRole: UserRole }) {
   const router = useRouter();
   const currentUser = useAuthStore((state) => state.user);
+  const setSession = useAuthStore((state) => state.setSession);
   const [role, setRole] = useState<UserRole>(initialRole);
   const [mode, setMode] = useState<AuthMode>("login");
   const [values, setValues] = useState<AuthFormValues>(emptyValues);
@@ -81,7 +83,7 @@ export function LoginClient({ initialRole }: { initialRole: UserRole }) {
     if (currentUser) router.replace(roleRedirects[currentUser.role]);
   }, [currentUser, router]);
 
-  const mutation = useMutation({
+  const otpMutation = useMutation({
     mutationFn: () => sendOtp({ email: values.email.trim().toLowerCase(), role, intent: mode === "signup" ? "SIGNUP" : "LOGIN" }),
     onSuccess: (delivery) => {
       const normalizedEmail = values.email.trim().toLowerCase();
@@ -102,6 +104,14 @@ export function LoginClient({ initialRole }: { initialRole: UserRole }) {
         clearStoredSignup(normalizedEmail, role);
       }
       router.push(`/verify-otp?email=${encodeURIComponent(normalizedEmail)}&role=${role}`);
+    },
+  });
+
+  const passwordLoginMutation = useMutation({
+    mutationFn: () => loginWithPassword({ email: values.email.trim().toLowerCase(), password: values.password }),
+    onSuccess: (session) => {
+      setSession(session);
+      router.replace(roleRedirects[session.user.role]);
     },
   });
 
@@ -129,7 +139,11 @@ export function LoginClient({ initialRole }: { initialRole: UserRole }) {
       fieldRefs.current[firstInvalid]?.focus();
       return;
     }
-    mutation.mutate();
+    if (role === "PLATFORM_ADMIN") {
+      passwordLoginMutation.mutate();
+      return;
+    }
+    otpMutation.mutate();
   }
 
   const selectedFlow = flowLabels[role];
@@ -142,8 +156,8 @@ export function LoginClient({ initialRole }: { initialRole: UserRole }) {
         <p className="text-sm font-semibold text-white/80">Preplate</p>
         <div>
           <p className="text-sm font-medium uppercase tracking-wide text-white/50">Preplate access</p>
-          <h1 className="mt-3 max-w-lg text-5xl font-semibold leading-tight">Email OTP sign in for scheduled meal operations.</h1>
-          <p className="mt-4 max-w-md text-white/70">Customers, restaurants, and platform admins use one secure email verification flow with role-specific onboarding.</p>
+          <h1 className="mt-3 max-w-lg text-5xl font-semibold leading-tight">Secure access for scheduled meal operations.</h1>
+          <p className="mt-4 max-w-md text-white/70">Customers and restaurants use email OTP, while platform admins sign in with managed credentials.</p>
         </div>
       </section>
 
@@ -188,6 +202,19 @@ export function LoginClient({ initialRole }: { initialRole: UserRole }) {
               <Input ref={(node) => { fieldRefs.current.email = node; }} value={values.email} onChange={(event) => updateField("email", event.target.value)} inputMode="email" placeholder="you@example.com" className={errorClass(errors.email)} />
             </FormField>
 
+            {role === "PLATFORM_ADMIN" ? (
+              <FormField label="Password" required error={errors.password}>
+                <Input
+                  ref={(node) => { fieldRefs.current.password = node; }}
+                  value={values.password}
+                  onChange={(event) => updateField("password", event.target.value)}
+                  type="password"
+                  autoComplete="current-password"
+                  className={errorClass(errors.password)}
+                />
+              </FormField>
+            ) : null}
+
             {mode === "signup" && role !== "PLATFORM_ADMIN" ? (
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField label="First name" required error={errors.firstName}>
@@ -216,8 +243,12 @@ export function LoginClient({ initialRole }: { initialRole: UserRole }) {
               </div>
             ) : null}
 
-            <Button className="w-full" isLoading={mutation.isPending} onClick={submit}><Mail className="size-4" /> Send email OTP</Button>
-            {mutation.error ? <p className="rounded-md bg-error-surface px-3 py-2 text-sm font-medium text-error">{mutation.error.message}</p> : null}
+            <Button className="w-full" isLoading={role === "PLATFORM_ADMIN" ? passwordLoginMutation.isPending : otpMutation.isPending} onClick={submit}>
+              {role === "PLATFORM_ADMIN" ? <LogIn className="size-4" /> : <Mail className="size-4" />}
+              {role === "PLATFORM_ADMIN" ? "Sign in" : "Send email OTP"}
+            </Button>
+            {otpMutation.error ? <p className="rounded-md bg-error-surface px-3 py-2 text-sm font-medium text-error">{otpMutation.error.message}</p> : null}
+            {passwordLoginMutation.error ? <p className="rounded-md bg-error-surface px-3 py-2 text-sm font-medium text-error">{passwordLoginMutation.error.message}</p> : null}
           </div>
         </div>
         </div>

@@ -3,8 +3,8 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.serializers import SendOTPSerializer, UserSerializer, VerifyOTPSerializer
-from apps.accounts.services import OTPAuthService
+from apps.accounts.serializers import PlatformAdminLoginSerializer, SendOTPSerializer, UserSerializer, VerifyOTPSerializer
+from apps.accounts.services import OTPAuthService, PasswordAuthService
 
 
 class SendOTPView(APIView):
@@ -78,6 +78,23 @@ class VerifyOTPView(APIView):
                 "refresh": result["refresh"],
                 "user": UserSerializer(result["user"]).data,
             }
+        )
+
+
+class PlatformAdminLoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = PlatformAdminLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = PasswordAuthService.login_platform_admin(**serializer.validated_data)
+        return Response(
+            {
+                "access": result["access"],
+                "refresh": result["refresh"],
+                "user": UserSerializer(result["user"]).data,
+            },
+            status=status.HTTP_200_OK,
         )
 
 

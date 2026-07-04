@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import type { OtpDeliveryResponse, SendOtpRequest, User, VerifyOtpRequest } from "@/types";
+import type { OtpDeliveryResponse, PasswordLoginRequest, SendOtpRequest, User, VerifyOtpRequest } from "@/types";
 
 export async function sendOtp(payload: SendOtpRequest) {
   const { data } = await apiClient.post<OtpDeliveryResponse>("/auth/otp/send/", payload);
@@ -13,6 +13,11 @@ export async function resendOtp(payload: SendOtpRequest) {
 
 export async function verifyOtp(payload: VerifyOtpRequest) {
   const { data } = await apiClient.post<{ access: string; refresh: string; user: User }>("/auth/otp/verify/", payload);
+  return data;
+}
+
+export async function loginWithPassword(payload: PasswordLoginRequest) {
+  const { data } = await apiClient.post<{ access: string; refresh: string; user: User }>("/auth/login/", payload);
   return data;
 }
 

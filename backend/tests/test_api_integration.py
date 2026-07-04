@@ -17,7 +17,23 @@ class FullOrderFlowAPITests(TestCase):
 
     def _auth(self, email: str, role: str = "CUSTOMER") -> str:
         if role == "PLATFORM_ADMIN":
-            User.objects.get_or_create(email=email, defaults={"role": User.Role.PLATFORM_ADMIN})
+            password = "Admin@12345"
+            user, _ = User.objects.get_or_create(
+                email=email,
+                defaults={
+                    "role": User.Role.PLATFORM_ADMIN,
+                    "is_staff": True,
+                    "is_superuser": True,
+                },
+            )
+            user.role = User.Role.PLATFORM_ADMIN
+            user.is_staff = True
+            user.is_superuser = True
+            user.set_password(password)
+            user.save(update_fields=["role", "is_staff", "is_superuser", "password"])
+            login = self.client.post("/api/v1/auth/login/", {"email": email, "password": password}, format="json")
+            self.assertEqual(login.status_code, status.HTTP_200_OK, login.json())
+            return login.json()["access"]
         send = self.client.post("/api/v1/auth/otp/send/", {"email": email, "role": role, "intent": "LOGIN" if role == "PLATFORM_ADMIN" else "SIGNUP"}, format="json")
         self.assertEqual(send.status_code, status.HTTP_200_OK)
         otp = send.json().get("debug_otp", "123456")

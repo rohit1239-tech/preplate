@@ -4,6 +4,7 @@ export type AuthMode = "login" | "signup";
 
 export type AuthField =
   | "email"
+  | "password"
   | "firstName"
   | "lastName"
   | "mobile"
@@ -15,6 +16,7 @@ export type AuthFieldErrors = Partial<Record<AuthField, string>>;
 
 export interface AuthFormValues {
   email: string;
+  password: string;
   firstName: string;
   lastName: string;
   mobile: string;
@@ -37,6 +39,8 @@ export function validateAuthForm(values: AuthFormValues, role: UserRole, mode: A
   if (!values.email.trim()) errors.email = "Email is required.";
   else if (!validEmail(values.email)) errors.email = "Enter a valid email address.";
 
+  if (role === "PLATFORM_ADMIN" && !values.password) errors.password = "Password is required.";
+
   if (mode === "signup" && role !== "PLATFORM_ADMIN") {
     if (!values.firstName.trim()) errors.firstName = "First name is required.";
     if (!values.lastName.trim()) errors.lastName = "Last name is required.";
@@ -55,6 +59,6 @@ export function validateAuthForm(values: AuthFormValues, role: UserRole, mode: A
 }
 
 export function firstAuthErrorField(errors: AuthFieldErrors): AuthField | null {
-  const order: AuthField[] = ["email", "firstName", "lastName", "mobile", "restaurantName", "restaurantPhone", "restaurantDescription"];
+  const order: AuthField[] = ["email", "password", "firstName", "lastName", "mobile", "restaurantName", "restaurantPhone", "restaurantDescription"];
   return order.find((field) => errors[field]) ?? null;
 }

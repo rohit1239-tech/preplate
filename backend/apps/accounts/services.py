@@ -5,10 +5,11 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from django.contrib.auth import authenticate
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
-from rest_framework.exceptions import PermissionDenied, Throttled, ValidationError
+from rest_framework.exceptions import AuthenticationFailed, PermissionDenied, Throttled, ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import User
@@ -260,10 +261,11 @@ class OTPAuthService:
     @staticmethod
     def _deliver_otp(email: str, role: str, otp: str, masked_email: str) -> None:
         if not getattr(settings, "DEBUG", False):
+            logger.info("otp_email_delivery_requested", extra={"email": masked_email, "role": role})
             result = send_otp_email_task.delay(email, otp)
             logger.info("otp_email_task_queued", extra={"email": masked_email, "role": role, "task_id": result.id})
         else:
-            logger.debug("otp_email_task_skipped_debug", extra={"email": masked_email, "role": role})
+            logger.info("otp_email_task_skipped_debug", extra={"email": masked_email, "role": role})
 
     @classmethod
     def _session_lock(cls, email: str, role: str):
@@ -295,3 +297,29 @@ class OTPAuthService:
     @staticmethod
     def _max_resends() -> int:
         return int(getattr(settings, "OTP_MAX_RESENDS", 3))
+
+
+class PasswordAuthService:
+    @staticmethod
+    def login_platform_admin(email: str, password: str) -> dict:
+        """Authenticate a platform admin with email and password."""
+        normalized_email = email.lower()
+        masked_email = _mask_email(normalized_email)
+        user = authenticate(username=normalized_email, password=password)
+        if not user:
+            logger.warning("platform_admin_password_login_failed", extra={"email": masked_email, "reason": "invalid_credentials"})
+            raise AuthenticationFailed("Invalid email or password.")
+        if user.role != User.Role.PLATFORM_ADMIN or not user.is_staff:
+            logger.warning("platform_admin_password_login_failed", extra={"email": masked_email, "reason": "not_platform_admin"})
+            raise PermissionDenied("Permission denied.")
+        if not user.is_active:
+            logger.warning("platform_admin_password_login_failed", extra={"email": masked_email, "reason": "inactive"})
+            raise AuthenticationFailed("This account is inactive.")
+
+        refresh = RefreshToken.for_user(user)
+        logger.info("platform_admin_password_login_succeeded", extra={"email": masked_email, "user_id": str(user.id)})
+        return {
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": user,
+        }

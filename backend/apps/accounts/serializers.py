@@ -97,3 +97,11 @@ class VerifyOTPSerializer(serializers.Serializer):
                 raise serializers.ValidationError({"restaurant_phone": "Enter a valid 10 digit restaurant contact number."})
 
         return attrs
+
+
+class PlatformAdminLoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(trim_whitespace=False)
+
+    def validate_email(self, value):
+        return value.lower()
