@@ -21,6 +21,7 @@ import type { VerifyOtpRequest } from "@/types";
 
 const emptyValues: AuthFormValues = {
   email: "",
+  password: "",
   firstName: "",
   lastName: "",
   mobile: "",
