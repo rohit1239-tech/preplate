@@ -116,10 +116,7 @@ ASGI_APPLICATION = "config.asgi.application"
 
 DATABASES = {
     "default": {
-        **env.db(
-            "DATABASE_URL",
-            default="postgres://postgres:postgres@localhost:5432/preplate",
-        ),
+        **env.db("DATABASE_URL"),
         "CONN_MAX_AGE": env.int("DATABASE_CONN_MAX_AGE", default=60),
         "CONN_HEALTH_CHECKS": env.bool("DATABASE_CONN_HEALTH_CHECKS", default=True),
         "DISABLE_SERVER_SIDE_CURSORS": env.bool(
