@@ -46,6 +46,7 @@ THIRD_PARTY_APPS = [
     "corsheaders",
     "channels",
     "drf_spectacular",
+    "anymail",
 ]
 
 LOCAL_APPS = [
