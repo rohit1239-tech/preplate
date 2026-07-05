@@ -52,3 +52,24 @@ SECURE_HSTS_PRELOAD = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+
+# ------------------------------------------------------------------------------
+# CELERY — SSL fix for Upstash / rediss:// URLs
+# Celery requires ssl_cert_reqs param explicitly; Django cache does not.
+# ------------------------------------------------------------------------------
+
+def _celery_redis_url(url: str) -> str:
+    """Append ssl_cert_reqs=CERT_NONE to rediss:// URLs for Celery compatibility."""
+    if url and url.startswith("rediss://") and "ssl_cert_reqs" not in url:
+        sep = "&" if "?" in url else "?"
+        return f"{url}{sep}ssl_cert_reqs=CERT_NONE"
+    return url
+
+
+CELERY_BROKER_URL = _celery_redis_url(
+    env("CELERY_BROKER_URL", default=REDIS_URL or "")
+)
+CELERY_RESULT_BACKEND = _celery_redis_url(
+    env("CELERY_RESULT_BACKEND", default=REDIS_URL or "")
+)
