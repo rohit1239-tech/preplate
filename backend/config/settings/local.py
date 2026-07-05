@@ -2,10 +2,15 @@ from .base import *
 
 DEBUG = env.bool("DEBUG", default=True)
 
-ALLOWED_HOSTS = [
-    "localhost",
-    "127.0.0.1",
-]
+ALLOWED_HOSTS = env.list(
+    "ALLOWED_HOSTS",
+    default=[
+        "localhost",
+        "127.0.0.1",
+        "preplate.onrender.com",
+        "preplate-1.onrender.com",
+    ],
+)
 
 CORS_ALLOW_ALL_ORIGINS = True
 

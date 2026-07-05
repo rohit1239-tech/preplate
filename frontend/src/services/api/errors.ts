@@ -32,7 +32,7 @@ function readablePayloadMessage(message: unknown, fallback: string) {
 export function normalizeApiError(error: unknown): ApiError {
   if (error instanceof AxiosError) {
     const payload = error.response?.data as Partial<ApiErrorPayload> | undefined;
-    const message = readablePayloadMessage(payload?.message, error.message);
+    const message = readablePayloadMessage(payload?.message ?? payload, error.message);
     return new ApiError(message, payload?.code ?? "HTTP_ERROR", error.response?.status, payload as ApiErrorPayload);
   }
   if (error instanceof Error) return new ApiError(error.message);
