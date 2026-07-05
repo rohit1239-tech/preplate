@@ -1,5 +1,6 @@
 import logging
 
+from anymail.exceptions import AnymailRequestsAPIError
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
@@ -15,18 +16,26 @@ def _mask_email(email: str) -> str:
     return f"{visible}***@{domain}"
 
 
-@shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, max_retries=3)
 def send_otp_email_task(self, email: str, otp: str) -> int:
     masked_email = _mask_email(email)
     logger.info("otp_email_send_started", extra={"email": masked_email, "task_id": self.request.id})
     expiry_minutes = max(1, int(getattr(settings, "OTP_EXPIRY_SECONDS", 300)) // 60)
-    sent_count = send_mail(
-        "Your Preplate verification code",
-        f"Your Preplate verification code is {otp}. It expires in {expiry_minutes} minutes.",
-        getattr(settings, "DEFAULT_FROM_EMAIL", None),
-        [email],
-        fail_silently=False,
-    )
+    try:
+        sent_count = send_mail(
+            "Your Preplate verification code",
+            f"Your Preplate verification code is {otp}. It expires in {expiry_minutes} minutes.",
+            getattr(settings, "DEFAULT_FROM_EMAIL", None),
+            [email],
+            fail_silently=False,
+        )
+    except AnymailRequestsAPIError as exc:
+        if exc.response is not None and exc.response.status_code == 429:
+            # Rate limited — wait longer before retrying
+            raise self.retry(exc=exc, countdown=10)
+        # 403 or other non-transient errors — don't retry
+        logger.error("otp_email_send_failed", extra={"email": masked_email, "error": str(exc)})
+        raise
     logger.info("otp_email_send_finished", extra={"email": masked_email, "task_id": self.request.id, "sent_count": sent_count})
     return sent_count
 
